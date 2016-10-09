@@ -7,20 +7,19 @@
 
 #define	MY_PORT	2220
 
-/* ---------------------------------------------------------------------
- This	is  a sample server which opens a stream socket and then awaits
- requests coming from client processes. In response for a request, the
- server sends an integer number  such	 that  different  processes  get
- distinct numbers. The server and the clients may run on different ma-
- chines.
- --------------------------------------------------------------------- */
+// user part needs to be fixed
 
 int main()
 {
-	int	sock, snew, fromlength, number, outnum;
+    char* users;
+
+	int	sock, snew, fromlength, number;
+    
+    uint16_t outnum, user_num = 1;
 
 	struct	sockaddr_in	master, from;
 
+    struct users * curr_users;
 
 	sock = socket (AF_INET, SOCK_STREAM, 0);
 	if (sock < 0) {
@@ -44,18 +43,40 @@ int main()
     printf("Listening \n");
 
     while(1){
+
+    // wait and listen to connection
 	fromlength = sizeof (from);
 	snew = accept (sock, (struct sockaddr*) & from, & fromlength);
-	if (snew < 0) {
+	
+    // drop if server accept failed
+    if (snew < 0) {
 		perror ("Server: accept failed");
 		exit (1);
     }
 
-    outnum = htonl (0xCF);
-	write (snew, &outnum, sizeof (outnum)); 
-
-    outnum = htonl (0xA7);
+    // when connectioned
+    // send first confirmation byte
+    outnum = htons (0xCF);
 	write (snew, &outnum, sizeof (outnum));
+
+    // send second confirmation byte
+    outnum = htons (0xA7);
+	write (snew, &outnum, sizeof (outnum));
+
+    // send number of users
+    user_num = htons(user_num);
+    write (snew, &user_num, sizeof (user_num));
+
+    // iterate through all the connected users
+    for (int i = 0; i < user_num; i++){
+
+        // send length
+        outnum = htons( sizeof(users[i]) + 1 );
+        write (snew, &outnum, sizeof (outnum));
+
+        // send string
+        write (snew, &users[i], strlen(&users[i])+1);
+    }
 
     close (snew);
 

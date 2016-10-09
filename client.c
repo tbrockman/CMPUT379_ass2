@@ -16,7 +16,11 @@
 
 int main()
 {
-	int	s, number1, number2;
+	int	s;
+
+    char* users;
+
+    uint16_t verify1, verify2, user_num, length;
 
 	struct	sockaddr_in	server;
 
@@ -48,13 +52,20 @@ int main()
 			exit (1);
 		}
 
-		read (s, &number1, sizeof (number1));
-		read (s, &number2, sizeof (number2));
-        if ((ntohl(number1) == 207)&&(ntohl(number2) == 167)){
+		read (s, &verify1, sizeof (verify1));
+		read (s, &verify2, sizeof (verify2));
+        if ((ntohs(verify1) == 207)&&(ntohs(verify2) == 167)){
 		    fprintf (stderr, "Connected to the correct server \n");
         }else{close(s);}
 
-
+        read (s, &user_num, sizeof (user_num));
+		fprintf (stderr, "number of user are: %d \n", ntohs(user_num));
+        
+        for(int i = 0; i < user_num; i++){
+            read(s, &length, sizeof (length));
+            read(s, &users[i], ntohs(length));
+                        
+        }
         close (s);
 
         break;
