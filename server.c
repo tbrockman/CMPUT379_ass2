@@ -5,17 +5,11 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define	MY_PORT	2220
+#define	MY_PORT	2222
 
-
-// cant add new user
-// only last two letters gets added
-// client side freezes trying to get 3rd user
 
 int main()
 {
-    char user_name[6] = "user1";
-
     char **users = malloc(sizeof(char*) * 100); // start with 100 users
 
     void *buff;
@@ -49,13 +43,6 @@ int main()
 
     printf("Listening \n");
     
-    ///////////////////////////////////////////
-    // add new user
-    users[0] = malloc(sizeof(user_name));
-    strcpy(users[0], user_name);
-    user_num++;
-    /////////////////////////////////////////////////
-
 
     while(1){
 
@@ -86,8 +73,8 @@ int main()
     for (int i = 0; i < user_num; i++){
 
         // send length
-        outnum = htons( sizeof(users[i]) + 1 );
-        write (snew, &outnum, sizeof (outnum));
+        outnum = htons( strlen(users[i]) + 1 );
+        write (snew, &outnum, sizeof(outnum));
 
         // send string
         write (snew, users[i], strlen(users[i])+1);
@@ -101,10 +88,10 @@ int main()
 
     // ask for length and user name
     read (snew, &length, sizeof(length));
+    length = ntohs(length);
     // give mem space for user name
-    users[user_num] = malloc(ntohs(length));
-    read (snew, user_name, ntohs(length));
-    strcpy(users[user_num], buffer);
+    users[user_num] = malloc(length);
+    read (snew, users[user_num], length);
     user_num++;
 
     close (snew);
