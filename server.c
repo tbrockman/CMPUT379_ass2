@@ -7,15 +7,22 @@
 
 #define	MY_PORT	2220
 
-// user part needs to be fixed
+
+// cant add new user
+// only last two letters gets added
+// client side freezes trying to get 3rd user
 
 int main()
 {
-    char* users;
+    char user_name[6] = "user1";
 
-	int	sock, snew, fromlength, number;
+    char **users = malloc(sizeof(char*) * 100); // start with 100 users
+
+    void *buff;
+
+	int	sock, snew, fromlength, number, size = 100;
     
-    uint16_t outnum, user_num = 1;
+    uint16_t outnum, length, user_num = 0;
 
 	struct	sockaddr_in	master, from;
 
@@ -41,6 +48,14 @@ int main()
 	listen (sock, 5);
 
     printf("Listening \n");
+    
+    ///////////////////////////////////////////
+    // add new user
+    users[0] = malloc(sizeof(user_name));
+    strcpy(users[0], user_name);
+    user_num++;
+    /////////////////////////////////////////////////
+
 
     while(1){
 
@@ -64,8 +79,8 @@ int main()
 	write (snew, &outnum, sizeof (outnum));
 
     // send number of users
-    user_num = htons(user_num);
-    write (snew, &user_num, sizeof (user_num));
+    outnum = htons(user_num);
+    write (snew, &outnum, sizeof (user_num));
 
     // iterate through all the connected users
     for (int i = 0; i < user_num; i++){
@@ -75,11 +90,28 @@ int main()
         write (snew, &outnum, sizeof (outnum));
 
         // send string
-        write (snew, &users[i], strlen(&users[i])+1);
+        write (snew, users[i], strlen(users[i])+1);
     }
+
+    // increase user space size if it reached limit
+    if ( user_num == size){
+        users = realloc(users, size * 2 * sizeof(char*));
+        size = size * 2;
+    }
+
+    // ask for length and user name
+    read (snew, &length, sizeof(length));
+    // give mem space for user name
+    users[user_num] = malloc(ntohs(length));
+    read (snew, user_name, ntohs(length));
+    strcpy(users[user_num], buffer);
+    user_num++;
 
     close (snew);
-
     }
+    // free all spaced use for user
+    for (int i = 0; i < user_num; i++){
+        free(users[i]);
+    }
+    free(users);
 }
-
