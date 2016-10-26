@@ -4,10 +4,10 @@ all = client server
 all: client server
 
 client: client.c
-	$(CC) $(CFLAGS) client.c -o  client.o
+	$(CC) $(CFLAGS) client.c -o chat379
 
 server: server.c
-	$(CC) $(CFLAGS) server.c -o server.o
+	$(CC) $(CFLAGS) server.c -o server379
 
 clean:
 	-rm -f *.o $(all) core

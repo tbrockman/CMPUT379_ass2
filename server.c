@@ -4,101 +4,80 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <signal.h>
 
-#define	MY_PORT	2222
+int GLOBAL_PORT;
+int * user_count_ptr;
+char ** users_ptr;
 
+void notify_users_disconnect(char * user_name_ptr) {
+    // fork process to non-blockingly notify
+    // all users that the user disconnected
+    // use linked list for users
+}
 
-int main()
-{
-    char **users = malloc(sizeof(char*) * 100); // start with 100 users
-
-    void *buff;
-
-	int	sock, snew, fromlength, number, size = 100;
+void notify_users_closed_socket(int socket, char * user_name_ptr) {
+    shutdown(socket, 0);
+    user_count_ptr--;
     
-    uint16_t outnum, length, user_num = 0;
+    // remove from users
+    // decrement user_cout
+    notify_users_diconnect(user_name_ptr);
+}
 
-	struct	sockaddr_in	master, from;
+void sigterm_handler(int signo) {
+    printf("Terminating...\n");
+    //for each user, disconnect their sockets
+    exit(0);
+}
 
-    struct users * curr_users;
+int main(int argc, char * argv[])
+{
+    if (!argv[1]) {
+	printf("Invalid port specified.\n");
+	exit(0);
+    }
 
-	sock = socket (AF_INET, SOCK_STREAM, 0);
-	if (sock < 0) {
-		perror ("Server: cannot open master socket");
-		exit (1);
-	}
+    daemon(0, 1); // change 1 to 0 when no longer testing
 
-	master.sin_family = AF_INET;
-	master.sin_addr.s_addr = INADDR_ANY;
-	master.sin_port = htons (MY_PORT);
+    int sock;
+    pid_t current_pid;
+    struct sockaddr_in master;
+    struct sigaction sigsegv_action;
 
-	if (bind (sock, (struct sockaddr*) &master, sizeof (master))) {
-		perror ("Server: cannot bind master socket");
-		exit (1);
-	}
+    sigsegv_action.sa_handler = sigterm_handler;
+    sigemptyset (&sigsegv_action.sa_mask);
+    sigsegv_action.sa_flags = 0;
+    sigaction(SIGTERM, &sigsegv_action, 0);
+    
+    current_pid = getpid();
+    printf("Process ID: %d\n", (int)(current_pid));
 
-	number = 0;
+    GLOBAL_PORT = atoi(argv[1]);
 
-	listen (sock, 5);
+    sock = socket (AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) {
+	perror ("Server: cannot open master socket");
+	exit(1);
+    }
+
+    master.sin_family = AF_INET;
+    master.sin_addr.s_addr = INADDR_ANY;
+    master.sin_port = htons (GLOBAL_PORT);
+
+    if (bind (sock, (struct sockaddr*) &master, sizeof (master))) {
+	perror ("Server: cannot bind master socket");
+	exit(1);
+    }
+
+    if (listen(sock, 5) == -1) {
+	perror("Error listening on master socket.\n");
+	exit(1);
+    }
 
     printf("Listening \n");
-    
 
-    while(1){
-
-    // wait and listen to connection
-	fromlength = sizeof (from);
-	snew = accept (sock, (struct sockaddr*) & from, & fromlength);
-	
-    // drop if server accept failed
-    if (snew < 0) {
-		perror ("Server: accept failed");
-		exit (1);
+    while(1) {
     }
-
-    // when connectioned
-    // send first confirmation byte
-    outnum = htons (0xCF);
-	write (snew, &outnum, sizeof (outnum));
-
-    // send second confirmation byte
-    outnum = htons (0xA7);
-	write (snew, &outnum, sizeof (outnum));
-
-    // send number of users
-    outnum = htons(user_num);
-    write (snew, &outnum, sizeof (user_num));
-
-    // iterate through all the connected users
-    for (int i = 0; i < user_num; i++){
-
-        // send length
-        outnum = htons( strlen(users[i]) + 1 );
-        write (snew, &outnum, sizeof(outnum));
-
-        // send string
-        write (snew, users[i], strlen(users[i])+1);
-    }
-
-    // increase user space size if it reached limit
-    if ( user_num == size){
-        users = realloc(users, size * 2 * sizeof(char*));
-        size = size * 2;
-    }
-
-    // ask for length and user name
-    read (snew, &length, sizeof(length));
-    length = ntohs(length);
-    // give mem space for user name
-    users[user_num] = malloc(length);
-    read (snew, users[user_num], length);
-    user_num++;
-
-    close (snew);
-    }
-    // free all spaced use for user
-    for (int i = 0; i < user_num; i++){
-        free(users[i]);
-    }
-    free(users);
 }
