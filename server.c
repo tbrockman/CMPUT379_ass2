@@ -10,7 +10,23 @@
 
 int GLOBAL_PORT;
 int * user_count_ptr;
-char ** users_ptr;
+struct node * user_linked_list_ptr;
+
+//void remove_node()
+
+void add_node(struct node * list_start_ptr, struct node * new_node_ptr) {
+    if (!list_start_ptr) {
+	list_start_ptr = new_node_ptr;
+    }
+    else {
+	struct node curr_node;
+	curr_node = *list_start_ptr;
+	while (curr_node.next) {
+	    curr_node = *(curr_node.next);
+	}
+	curr_node.next = new_node_ptr;
+    }
+}
 
 void notify_users_disconnect(char * user_name_ptr) {
     // fork process to non-blockingly notify
@@ -20,11 +36,11 @@ void notify_users_disconnect(char * user_name_ptr) {
 
 void notify_users_closed_socket(int socket, char * user_name_ptr) {
     shutdown(socket, 0);
-    user_count_ptr--;
+    *user_count_ptr--;
     
     // remove from users
     // decrement user_cout
-    notify_users_diconnect(user_name_ptr);
+    notify_users_disconnect(user_name_ptr);
 }
 
 void sigterm_handler(int signo) {

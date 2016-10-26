@@ -5,6 +5,6 @@ struct node {
     unsigned short int length;
     char * username_ptr;
     struct node * next;
-}
+};
 
 #endif
