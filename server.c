@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include "server.h"
 
 int GLOBAL_PORT;
 int * user_count_ptr;
