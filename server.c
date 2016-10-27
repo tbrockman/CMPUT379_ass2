@@ -13,7 +13,7 @@ int * user_count_ptr;
 struct node * user_linked_list_ptr;
 
 
-struct node * add_node(char * text, unsigned short int length) {
+struct node * create_node(char * text, unsigned short int length) {
     struct node * new_node;
 
     new_node = (struct node *)malloc(sizeof(struct node));
@@ -28,7 +28,6 @@ struct node * add_node(char * text, unsigned short int length) {
 	struct node * current;
 	current = user_linked_list_ptr;
 	while (current->next) {
-	    printf("%s\n", current->username_ptr);
 	    current = current->next;
 	}
 	current->next = new_node;
@@ -67,16 +66,21 @@ int main(int argc, char * argv[])
 
     daemon(0, 1); // change 1 to 0 when no longer testing
 
-    int sock;
+    int sock, fdmax, newfd;
     pid_t current_pid;
     struct sockaddr_in master;
     struct sigaction sigsegv_action;
+    fd_set read_fds;
+    fd_set write_fds;
 
     sigsegv_action.sa_handler = sigterm_handler;
     sigemptyset (&sigsegv_action.sa_mask);
     sigsegv_action.sa_flags = 0;
     sigaction(SIGTERM, &sigsegv_action, 0);
     
+    FD_ZERO(&read_fds);
+    FD_ZERO(&write_fds);
+
     current_pid = getpid();
     printf("Process ID: %d\n", (int)(current_pid));
 
@@ -93,27 +97,52 @@ int main(int argc, char * argv[])
     master.sin_port = htons (GLOBAL_PORT);
 
     if (bind (sock, (struct sockaddr*) &master, sizeof (master))) {
-	perror ("Server: cannot bind master socket");
+	perror ("Server: cannot bind master socket\n");
+	exit(1);
+     }
+
+    if (listen(sock, 5) == -1) {
+	perror("Error listening on master socket\n");
 	exit(1);
     }
 
-    if (listen(sock, 5) == -1) {
-	perror("Error listening on master socket.\n");
-	exit(1);
-    }
+    FD_SET(sock, &read_fds);
+    fdmax = sock;
 
     printf("Listening \n");
 
     while(1) {
+	if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+	    perror("Error on select\n");
+	    exit(1);
+	}
+
+	for(int i = 0; i <= fdmax; i++) {
+	    if (FD_ISSET(i, &read_fds)) {
+		// is this the listener
+		if (i == sock) {
+		    //fork new process with a pipe
+		    //let new process send messages
+		}
+		// we have read data from a pipe
+		// types:
+		// user disconnect -> remove user from list, tell users
+		// user connect -> add user to linked list, tell users
+		// user message -> send to all users
+		else {
+		}
+	    }
+	    
+	}
 	char test1[10] = "test123";
 	char other[10] = "other";
 	unsigned short int length = 10;
 	struct node * test;
 	struct node * test2;
 	struct node * test3;
-	test = add_node(test1, length);
-	test2 = add_node(other, length);
-	test3 = add_node(other, length);
+	test = create_node(test1, length);
+	test2 = create_node(other, length);
+	test3 = create_node(other, length);
 	free(test);
 	free(test2);
 	free(test3);
