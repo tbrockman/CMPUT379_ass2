@@ -12,20 +12,29 @@ int GLOBAL_PORT;
 int * user_count_ptr;
 struct node * user_linked_list_ptr;
 
-//void remove_node()
 
-void add_node(struct node * list_start_ptr, struct node * new_node_ptr) {
-    if (!list_start_ptr) {
-	list_start_ptr = new_node_ptr;
+struct node * add_node(char * text, unsigned short int length) {
+    struct node * new_node;
+
+    new_node = (struct node *)malloc(sizeof(struct node));
+    new_node->username_ptr = text;
+    new_node->length = length;
+    new_node->next = NULL;
+
+    if (!user_linked_list_ptr) {
+	user_linked_list_ptr = new_node;
     }
     else {
-	struct node curr_node;
-	curr_node = *list_start_ptr;
-	while (curr_node.next) {
-	    curr_node = *(curr_node.next);
+	struct node * current;
+	current = user_linked_list_ptr;
+	while (current->next) {
+	    printf("%s\n", current->username_ptr);
+	    current = current->next;
 	}
-	curr_node.next = new_node_ptr;
+	current->next = new_node;
     }
+
+    return new_node;
 }
 
 void notify_users_disconnect(char * user_name_ptr) {
@@ -96,5 +105,19 @@ int main(int argc, char * argv[])
     printf("Listening \n");
 
     while(1) {
+	char test1[10] = "test123";
+	char other[10] = "other";
+	unsigned short int length = 10;
+	struct node * test;
+	struct node * test2;
+	struct node * test3;
+	test = add_node(test1, length);
+	test2 = add_node(other, length);
+	test3 = add_node(other, length);
+	free(test);
+	free(test2);
+	free(test3);
+	exit(0);
+	//remove_node(&test);
     }
 }
