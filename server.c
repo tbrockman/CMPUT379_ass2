@@ -113,6 +113,7 @@ int main(int argc, char * argv[])
 
     while(1) {
 	if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+	    printf("Select error.\n");
 	    perror("Error on select\n");
 	    exit(1);
 	}
@@ -121,8 +122,28 @@ int main(int argc, char * argv[])
 	    if (FD_ISSET(i, &read_fds)) {
 		// is this the listener
 		if (i == sock) {
-		    //fork new process with a pipe
-		    //let new process send messages
+		    printf("CLIENT CONNECTION\n");
+		    int fd_parent[2];
+		    int fd_child[2];
+		    pid_t pid = fork();
+		    if (pid == 0) {
+			// we're in the child
+			close(fd_child[1]); // close child write
+			close(fd_parent[0]); // close parent read
+			// we now need to communicate with the client
+		    }
+		    
+		    else if (pid > 0) {
+			// we're in the parent
+			close(fd_child[0]); // close child read;
+			close(fd_parent[1]); // close parent write;
+		    }
+		    
+		    else {
+			printf("here???\n");
+			perror("Error creating pipe\n");
+			exit(1);
+		    }
 		}
 		// we have read data from a pipe
 		// types:
@@ -135,18 +156,10 @@ int main(int argc, char * argv[])
 	    
 	}
 	char test1[10] = "test123";
-	char other[10] = "other";
 	unsigned short int length = 10;
 	struct node * test;
-	struct node * test2;
-	struct node * test3;
 	test = create_node(test1, length);
-	test2 = create_node(other, length);
-	test3 = create_node(other, length);
 	free(test);
-	free(test2);
-	free(test3);
-	exit(0);
 	//remove_node(&test);
     }
 }
