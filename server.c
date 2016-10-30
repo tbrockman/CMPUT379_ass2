@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <string.h>
 #include <signal.h>
+#include <arpa/inet.h>
+#include <netdb.h>
 #include "server.h"
 
 int GLOBAL_PORT;
@@ -68,9 +70,10 @@ int main(int argc, char * argv[])
 
     int sock, fdmax, newfd;
     pid_t current_pid;
-    struct sockaddr_in master;
+    struct sockaddr_in sa;
     struct sockaddr_in remoteaddr;
     struct sigaction sigsegv_action;
+    socklen_t addrlen;
     fd_set read_fds;
     fd_set write_fds;
 
@@ -93,11 +96,11 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
-    master.sin_family = AF_INET;
-    master.sin_addr.s_addr = INADDR_ANY;
-    master.sin_port = htons (GLOBAL_PORT);
+    sa.sin_family = AF_INET;
+    sa.sin_addr.s_addr = INADDR_ANY;
+    sa.sin_port = htons (GLOBAL_PORT);
 
-    if (bind (sock, (struct sockaddr*) &master, sizeof (master))) {
+    if (bind (sock, (struct sockaddr*) &sa, sizeof (sa))) {
 	perror ("Server: cannot bind master socket\n");
 	exit(1);
      }
@@ -130,7 +133,7 @@ int main(int argc, char * argv[])
                     if (newfd == -1) {
                         perror("Error accepting client connection.");
                     } else {
-                        FD_SET(newfd, &master); // add to master set
+                        FD_SET(newfd, &read_fds); // add to reading fds
                         if (newfd > fdmax) {    // keep track of the max
                             fdmax = newfd;
                         }
@@ -150,13 +153,13 @@ int main(int argc, char * argv[])
 			// we're in the parent
 			close(fd_child[0]); // close child read;
 			close(fd_parent[1]); // close parent write;
-			shutdown(newfd, 2);
+			shutdown(newfd, 2); // close parent socket, 
+			                    // socket is only important to the child
 			printf("Shutdown socket FD in parent.\n");
 
 		    }
 		    
 		    else {
-			printf("here???\n");
 			perror("Error creating pipe\n");
 			exit(1);
 		    }
