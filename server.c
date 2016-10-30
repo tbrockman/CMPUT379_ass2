@@ -69,6 +69,7 @@ int main(int argc, char * argv[])
     int sock, fdmax, newfd;
     pid_t current_pid;
     struct sockaddr_in master;
+    struct sockaddr_in remoteaddr;
     struct sigaction sigsegv_action;
     fd_set read_fds;
     fd_set write_fds;
@@ -123,6 +124,18 @@ int main(int argc, char * argv[])
 		// is this the listener
 		if (i == sock) {
 		    printf("CLIENT CONNECTION\n");
+		    addrlen = sizeof remoteaddr;
+                    newfd = accept(sock, (struct sockaddr *)&remoteaddr, &addrlen);
+
+                    if (newfd == -1) {
+                        perror("Error accepting client connection.");
+                    } else {
+                        FD_SET(newfd, &master); // add to master set
+                        if (newfd > fdmax) {    // keep track of the max
+                            fdmax = newfd;
+                        }
+		    }
+	    
 		    int fd_parent[2];
 		    int fd_child[2];
 		    pid_t pid = fork();
@@ -137,6 +150,9 @@ int main(int argc, char * argv[])
 			// we're in the parent
 			close(fd_child[0]); // close child read;
 			close(fd_parent[1]); // close parent write;
+			shutdown(newfd, 2);
+			printf("Shutdown socket FD in parent.\n");
+
 		    }
 		    
 		    else {
