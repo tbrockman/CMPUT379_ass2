@@ -14,6 +14,16 @@ int GLOBAL_PORT;
 int * user_count_ptr;
 struct node * user_linked_list_ptr;
 
+int count_nodes() {
+    int count = 0;
+    struct node * current;
+    current = user_linked_list_ptr;
+    while (current->next) {
+	current = current->next;
+	count++;
+    }
+    return count;
+}
 
 struct node * create_node(char * text, unsigned short int length) {
     struct node * new_node;
@@ -100,6 +110,11 @@ int main(int argc, char * argv[])
     sa.sin_addr.s_addr = INADDR_ANY;
     sa.sin_port = htons (GLOBAL_PORT);
 
+    
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
+	perror("setsockopt(SO_REUSEADDR) failed");
+
+
     if (bind (sock, (struct sockaddr*) &sa, sizeof (sa))) {
 	perror ("Server: cannot bind master socket\n");
 	exit(1);
@@ -147,6 +162,10 @@ int main(int argc, char * argv[])
 			close(fd_child[1]); // close child write
 			close(fd_parent[0]); // close parent read
 			// we now need to communicate with the client
+			int n;
+			n = htons(0xCF + 0xA7);
+			send(newfd, (const void *)(&n), sizeof(n), 0);
+			printf("SENT DATA TO CLIENT.\n");
 		    }
 		    
 		    else if (pid > 0) {

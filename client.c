@@ -44,5 +44,8 @@ int main(int argc, char * argv[])
     remoteaddr.sin_port = htons(atoi(port_no));
     connect(sockfd, (struct sockaddr *)&remoteaddr, sizeof(remoteaddr));
     
+    char buff[2];
+    recv(sockfd, buff, sizeof(buff), 0);
+    printf("HEARD: %c %c\n", buff[0], buff[1]);
 }
 
