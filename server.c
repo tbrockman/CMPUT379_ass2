@@ -12,7 +12,6 @@
 
 int GLOBAL_PORT;
 int * user_count_ptr;
-int * fdmax_ptr;
 struct node * user_linked_list_ptr;
 
 int count_nodes() {
@@ -79,12 +78,13 @@ int main(int argc, char * argv[])
 
     daemon(0, 1); // change 1 to 0 when no longer testing
 
-    int sock, fdmax, newfd;
+    int sock, fdmax, clientfd;
     pid_t current_pid;
     struct sockaddr_in sa;
     struct sockaddr_in remoteaddr;
     struct sigaction sigsegv_action;
     socklen_t addrlen;
+    fd_set master_read_fds; // because select modifies read_fds
     fd_set read_fds;
     fd_set write_fds;
 
@@ -93,6 +93,7 @@ int main(int argc, char * argv[])
     sigsegv_action.sa_flags = 0;
     sigaction(SIGTERM, &sigsegv_action, 0);
     
+    FD_ZERO(&master_read_fds);
     FD_ZERO(&read_fds);
     FD_ZERO(&write_fds);
 
@@ -126,15 +127,15 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
-    FD_SET(sock, &read_fds);
+    FD_SET(sock, &master_read_fds);
     fdmax = sock;
-    fdmax_ptr = &fdmax;
 
     printf("Listening \n");
 
     while(1) {
+	read_fds = master_read_fds;
+
 	if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
-	    printf("Select error.\n");
 	    perror("Error on select\n");
 	    exit(1);
 	}
@@ -145,8 +146,8 @@ int main(int argc, char * argv[])
 		if (i == sock) {
 		    printf("CLIENT CONNECTION\n");
 		    addrlen = sizeof remoteaddr;
-                    newfd = accept(sock, (struct sockaddr *)&remoteaddr, &addrlen);
-                    if (newfd == -1) {
+                    clientfd = accept(sock, (struct sockaddr *)&remoteaddr, &addrlen);
+                    if (clientfd == -1) {
                         perror("Error accepting client connection.");
                     } 
 
@@ -161,35 +162,46 @@ int main(int argc, char * argv[])
 			close(fd_child[1]); // close child write
 			close(fd_parent[0]); // close parent read
 			close(sock); // close listening socket
-			FD_ZERO(&read_fds); // erase read fds
+
+			fdmax = clientfd;
+			FD_ZERO(&master_read_fds); // erase read fds
 			FD_ZERO(&write_fds); // erase write fds
 			FD_SET(fd_parent[1], &write_fds); // add parent write
-			FD_SET(fd_child[0], &read_fds); // add child read
-			
+			FD_SET(fd_child[0], &master_read_fds); // add child read
+			FD_SET(clientfd, &master_read_fds); // add client to read
+
+			if (fd_parent[1] > fdmax) {
+			    fdmax = fd_parent[1];
+			}
+
+			if (fd_child[0] > fdmax) {
+			    fdmax = fd_child[0];
+			}
+			printf("FDMAX: %d\n", fdmax);
+
 			// we now need to communicate with the client
 			int n;
 			n = htons((0xCF << 8) + 0xA7);
 			// write(fd_parent[1], string, (strlen(string)+1));
-			send(newfd, (const void *)(&n), sizeof(n), 0);
+			send(clientfd, (const void *)(&n), sizeof(n), 0);
+			
 		    }
 		    
 		    else if (pid > 0) {
 			// we're in the parent
 			close(fd_child[0]); // close child read;
 			close(fd_parent[1]); // close parent write;
-			close(newfd); // close accepted socket, 
+			close(clientfd); // close accepted socket, 
 			printf("Shutdown socket FD in parent.\n");
-			FD_SET(fd_parent[0], &read_fds); // add parent read
+			FD_SET(fd_parent[0], &master_read_fds); // add parent read
 			FD_SET(fd_child[1], &write_fds); // add child write
 
 			if (fd_parent[0] > fdmax) {
 			    fdmax = fd_parent[0];
-			    fdmax_ptr = &fdmax;
 			}
 
 			if (fd_child[1] > fdmax) {
-			    fdmax = fd_parent[0];
-			    fdmax_ptr = &fdmax;
+			    fdmax = fd_child[1];
 			}
 
 			//read(fd_parent[0], readbuffer, sizeof(readbuffer));
@@ -205,7 +217,16 @@ int main(int argc, char * argv[])
 		// user disconnect -> remove user from list, tell users
 		// user connect -> add user to linked list, tell users
 		// user message -> send to all users
-		else {
+
+
+		// we are a child, we have data from a socket
+		else if (i == clientfd) {
+		    char buff[200];
+		    recv(clientfd, buff, sizeof(buff), 0);
+		    printf("heard back: %s\n", buff);
+
+		    // write this to master pipe
+
 		}
 	    }
 	    

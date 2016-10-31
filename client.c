@@ -47,5 +47,18 @@ int main(int argc, char * argv[])
     char buff[2];
     recv(sockfd, buff, sizeof(buff), 0);
     printf("HEARD: %02X, %02X\n", (int)buff[0], (int)buff[1]);
+    fflush(stdout);
+    // other stuff at you should hear, more recv's
+    
+    char *buffer = NULL;
+    int read;
+    unsigned int len;
+    while (1) {
+	printf("%s> ", username);
+	fflush(stdout);
+	read = getline(&buffer, &len, stdin);
+	send(sockfd, buffer, len, 0);
+    }
+    return 0;
 }
 
