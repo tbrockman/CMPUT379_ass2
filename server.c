@@ -212,21 +212,30 @@ int main(int argc, char * argv[])
 			exit(1);
 		    }
 		}
-		// we have read data from a pipe
+
+		// we are a child, we have data from a socket
+		else if (i == clientfd) {
+		    unsigned short int length;
+		    int receive;
+		    receive = recv(clientfd, &length, sizeof(length), 0);
+		    if (receive == -1) {
+			perror("Client disconnect.\n");
+			exit(1);
+		    }
+		    printf("heard: %hu\n", ntohs(length));
+		    // printf("heard back: %s\n", buff);
+
+		    // write this to master pipe
+
+		}
+
+		// other we have read data from a pipe
 		// types:
 		// user disconnect -> remove user from list, tell users
 		// user connect -> add user to linked list, tell users
 		// user message -> send to all users
-
-
-		// we are a child, we have data from a socket
-		else if (i == clientfd) {
-		    char buff[200];
-		    recv(clientfd, buff, sizeof(buff), 0);
-		    printf("heard back: %s\n", buff);
-
-		    // write this to master pipe
-
+		else {
+		    
 		}
 	    }
 	    

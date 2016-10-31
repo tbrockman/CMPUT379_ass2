@@ -46,18 +46,20 @@ int main(int argc, char * argv[])
     
     char buff[2];
     recv(sockfd, buff, sizeof(buff), 0);
-    printf("HEARD: %02X, %02X\n", (int)buff[0], (int)buff[1]);
-    fflush(stdout);
+    printf("HEARD: %02X, %02X\n", buff[0], buff[1]);
     // other stuff at you should hear, more recv's
     
     char *buffer = NULL;
     int read;
-    unsigned int len;
+    size_t message_length = 0;
+    unsigned short int network_order;
     while (1) {
 	printf("%s> ", username);
-	fflush(stdout);
-	read = getline(&buffer, &len, stdin);
-	send(sockfd, buffer, len, 0);
+	read = getline(&buffer, &message_length, stdin);
+	network_order = htons(read);
+	printf("sent: %hu\n", ntohs(network_order));
+	send(sockfd, &network_order, sizeof(network_order), 0);
+	//send(sockfd, buffer, message_length, 0);
     }
     return 0;
 }
