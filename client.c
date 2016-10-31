@@ -46,6 +46,6 @@ int main(int argc, char * argv[])
     
     char buff[2];
     recv(sockfd, buff, sizeof(buff), 0);
-    printf("HEARD: %c %c\n", buff[0], buff[1]);
+    printf("HEARD: %02X, %02X\n", (int)buff[0], (int)buff[1]);
 }
 

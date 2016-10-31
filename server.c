@@ -12,6 +12,7 @@
 
 int GLOBAL_PORT;
 int * user_count_ptr;
+int * fdmax_ptr;
 struct node * user_linked_list_ptr;
 
 int count_nodes() {
@@ -127,6 +128,7 @@ int main(int argc, char * argv[])
 
     FD_SET(sock, &read_fds);
     fdmax = sock;
+    fdmax_ptr = &fdmax;
 
     printf("Listening \n");
 
@@ -144,35 +146,30 @@ int main(int argc, char * argv[])
 		    printf("CLIENT CONNECTION\n");
 		    addrlen = sizeof remoteaddr;
                     newfd = accept(sock, (struct sockaddr *)&remoteaddr, &addrlen);
-
                     if (newfd == -1) {
                         perror("Error accepting client connection.");
                     } 
-		    /**else {
-    FD_SET(newfd, &read_fds); // add to reading fds
-                        if (newfd > fdmax) {    // keep track of the max
-                            fdmax = newfd;
-                        }
-			}**/
-	    
+
 		    int fd_parent[2];
 		    int fd_child[2];
-		    char string[] = "Hello, world!\n";
-		    char readbuffer[80];
 		    pipe(fd_parent);
 		    pipe(fd_child);
 		    pid_t pid = fork();
+
 		    if (pid == 0) {
 			// we're in the child
 			close(fd_child[1]); // close child write
 			close(fd_parent[0]); // close parent read
 			close(sock); // close listening socket
-			FD_ZERO(&read_fds);
-			FD_ZERO(&write_fds);
+			FD_ZERO(&read_fds); // erase read fds
+			FD_ZERO(&write_fds); // erase write fds
+			FD_SET(fd_parent[1], &write_fds); // add parent write
+			FD_SET(fd_child[0], &read_fds); // add child read
+			
 			// we now need to communicate with the client
 			int n;
 			n = htons((0xCF << 8) + 0xA7);
-			write(fd_parent[1], string, (strlen(string)+1));
+			// write(fd_parent[1], string, (strlen(string)+1));
 			send(newfd, (const void *)(&n), sizeof(n), 0);
 		    }
 		    
@@ -182,9 +179,20 @@ int main(int argc, char * argv[])
 			close(fd_parent[1]); // close parent write;
 			close(newfd); // close accepted socket, 
 			printf("Shutdown socket FD in parent.\n");
-			
-			read(fd_parent[0], readbuffer, sizeof(readbuffer));
-			printf("Received string: %s", readbuffer);
+			FD_SET(fd_parent[0], &read_fds); // add parent read
+			FD_SET(fd_child[1], &write_fds); // add child write
+
+			if (fd_parent[0] > fdmax) {
+			    fdmax = fd_parent[0];
+			    fdmax_ptr = &fdmax;
+			}
+
+			if (fd_child[1] > fdmax) {
+			    fdmax = fd_parent[0];
+			    fdmax_ptr = &fdmax;
+			}
+
+			//read(fd_parent[0], readbuffer, sizeof(readbuffer));
 		    }
 		    
 		    else {
