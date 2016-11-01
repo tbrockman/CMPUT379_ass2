@@ -25,7 +25,6 @@ int main(int argc, char * argv[])
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < -1) {
-	printf("Error here\n.");
 	perror("Client socket error.\n");
 	exit(1);
     }
@@ -43,18 +42,32 @@ int main(int argc, char * argv[])
     remoteaddr.sin_addr.s_addr = inet_addr(hostname);
     remoteaddr.sin_port = htons(atoi(port_no));
     connect(sockfd, (struct sockaddr *)&remoteaddr, sizeof(remoteaddr));
+
+    //0xCF 0xA7 portion of the handshake
     
-    char buff[2];
+    unsigned char buff[2];
     recv(sockfd, buff, sizeof(buff), 0);
-    printf("HEARD: %02X, %02X\n", buff[0], buff[1]);
-    // other stuff at you should hear, more recv's
+
+    if (buff[0] != 0xcf || buff[1] != 0xa7) {
+	perror("Incorrect handshake from server.");
+    }
+
+    // Numbers of users
+
+    unsigned short int num_connected;
+    recv(sockfd, &num_connected, sizeof(num_connected), 0);
+    num_connected = ntohs(num_connected);
+
+    printf("Number of users: %hu\n", num_connected);
+
+    // List of usernames
     
     char *buffer = NULL;
     int read;
     size_t message_length = 0;
     unsigned short int network_order;
     while (1) {
-	printf("%s> ", username);
+	//printf("%s> ", username);
 	read = getline(&buffer, &message_length, stdin);
 	network_order = htons(read-1);
 	printf("sent: %hu\n", ntohs(network_order));
