@@ -76,7 +76,8 @@ int main(int argc, char * argv[])
 
     daemon(0, 1); // change 1 to 0 when no longer testing
 
-    int sock, fdmax, clientfd, timeperiod;
+    int sock, fdmax, clientfd;
+    int * timeperiod;
     pid_t current_pid;
     struct sockaddr_in sa;
     struct sockaddr_in remoteaddr;
@@ -208,7 +209,6 @@ int main(int argc, char * argv[])
 			    fdmax = fd_child[1];
 			}
 
-			//read(fd_parent[0], readbuffer, sizeof(readbuffer));
 		    }
 		    
 		    else {
@@ -244,12 +244,9 @@ int main(int argc, char * argv[])
 		    }
 
 		    for(int i = 0; i <= fdmax; i++) {
-			int write_success;
 		    	if (FD_ISSET(i, &write_fds)) {
-		    	    write_success = write(i, buff, host_length+1);
-			    if (write_success == -1) {
-				perror("Error writing to server pipe.\n");
-			    }
+			    write(i, &host_length+1, sizeof(host_length));
+		    	    write(i, buff, host_length+1);
 		    	}
 		    }
 
@@ -263,7 +260,13 @@ int main(int argc, char * argv[])
 		// user connect -> add user to linked list, tell users
 		// user message -> send to all users
 		else {
-		    printf("read data from a pipe!\n");
+		    int read_length;
+		    char * read_buff;
+
+		    read(i, &read_length, sizeof(read_length));
+		    read_buff = malloc(read_length * sizeof(char));
+		    read(i, read_buff, read_length);
+		    printf("heard from pipe: %s\n", read_buff);
 		}
 	    }
 	    
