@@ -76,7 +76,7 @@ int main(int argc, char * argv[])
 
     daemon(0, 1); // change 1 to 0 when no longer testing
 
-    int sock, fdmax, clientfd;
+    int sock, fdmax, clientfd, timeperiod;
     pid_t current_pid;
     struct sockaddr_in sa;
     struct sockaddr_in remoteaddr;
@@ -86,6 +86,8 @@ int main(int argc, char * argv[])
     fd_set master_write_fds;
     fd_set read_fds;
     fd_set write_fds;
+
+    timeperiod = NULL;
 
     sigsegv_action.sa_handler = sigterm_handler;
     sigemptyset (&sigsegv_action.sa_mask);
@@ -136,6 +138,7 @@ int main(int argc, char * argv[])
 	read_fds = master_read_fds;
 	write_fds = master_write_fds;
 
+	// note for later: select returns 0 on timeout
 	if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 	    perror("Error on select\n");
 	    exit(1);
