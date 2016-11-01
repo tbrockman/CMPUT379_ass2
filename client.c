@@ -56,10 +56,10 @@ int main(int argc, char * argv[])
     while (1) {
 	printf("%s> ", username);
 	read = getline(&buffer, &message_length, stdin);
-	network_order = htons(read);
+	network_order = htons(read-1);
 	printf("sent: %hu\n", ntohs(network_order));
 	send(sockfd, &network_order, sizeof(network_order), 0);
-	//send(sockfd, buffer, message_length, 0);
+	send(sockfd, buffer, read-1, 0);
     }
     return 0;
 }

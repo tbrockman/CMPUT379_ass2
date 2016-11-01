@@ -11,7 +11,6 @@
 #include "server.h"
 
 int GLOBAL_PORT;
-int * user_count_ptr;
 struct node * user_linked_list_ptr;
 
 int count_nodes() {
@@ -56,7 +55,6 @@ void notify_users_disconnect(char * user_name_ptr) {
 
 void notify_users_closed_socket(int socket, char * user_name_ptr) {
     shutdown(socket, 0);
-    *user_count_ptr--;
     
     // remove from users
     // decrement user_cout
@@ -85,6 +83,7 @@ int main(int argc, char * argv[])
     struct sigaction sigsegv_action;
     socklen_t addrlen;
     fd_set master_read_fds; // because select modifies read_fds
+    fd_set master_write_fds;
     fd_set read_fds;
     fd_set write_fds;
 
@@ -94,6 +93,7 @@ int main(int argc, char * argv[])
     sigaction(SIGTERM, &sigsegv_action, 0);
     
     FD_ZERO(&master_read_fds);
+    FD_ZERO(&master_write_fds);
     FD_ZERO(&read_fds);
     FD_ZERO(&write_fds);
 
@@ -134,6 +134,7 @@ int main(int argc, char * argv[])
 
     while(1) {
 	read_fds = master_read_fds;
+	write_fds = master_write_fds;
 
 	if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
 	    perror("Error on select\n");
@@ -166,7 +167,7 @@ int main(int argc, char * argv[])
 			fdmax = clientfd;
 			FD_ZERO(&master_read_fds); // erase read fds
 			FD_ZERO(&write_fds); // erase write fds
-			FD_SET(fd_parent[1], &write_fds); // add parent write
+			FD_SET(fd_parent[1], &master_write_fds); // add parent write
 			FD_SET(fd_child[0], &master_read_fds); // add child read
 			FD_SET(clientfd, &master_read_fds); // add client to read
 
@@ -182,7 +183,7 @@ int main(int argc, char * argv[])
 			// we now need to communicate with the client
 			int n;
 			n = htons((0xCF << 8) + 0xA7);
-			// write(fd_parent[1], string, (strlen(string)+1));
+			
 			send(clientfd, (const void *)(&n), sizeof(n), 0);
 			
 		    }
@@ -194,7 +195,7 @@ int main(int argc, char * argv[])
 			close(clientfd); // close accepted socket, 
 			printf("Shutdown socket FD in parent.\n");
 			FD_SET(fd_parent[0], &master_read_fds); // add parent read
-			FD_SET(fd_child[1], &write_fds); // add child write
+			FD_SET(fd_child[1], &master_write_fds); // add child write
 
 			if (fd_parent[0] > fdmax) {
 			    fdmax = fd_parent[0];
@@ -215,15 +216,39 @@ int main(int argc, char * argv[])
 
 		// we are a child, we have data from a socket
 		else if (i == clientfd) {
-		    unsigned short int length;
+		    unsigned short int network_length;
+		    int host_length;
+		    char * buff;
 		    int receive;
-		    receive = recv(clientfd, &length, sizeof(length), 0);
+		    receive = recv(clientfd, &network_length, sizeof(network_length), 0);
+
 		    if (receive == -1) {
 			perror("Client disconnect.\n");
 			exit(1);
 		    }
-		    printf("heard: %hu\n", ntohs(length));
-		    // printf("heard back: %s\n", buff);
+
+		    host_length = ntohs(network_length);
+		    buff = malloc((host_length + 1) * sizeof(char));
+		    recv(clientfd, buff, host_length, 0);
+		    buff[host_length] = '\0';
+
+		    printf("heard: %hu\n", host_length);
+		    printf("and: %s\n", buff);
+
+		    if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
+			perror("Error on write select\n");
+			exit(1);
+		    }
+
+		    for(int i = 0; i <= fdmax; i++) {
+			int write_success;
+		    	if (FD_ISSET(i, &write_fds)) {
+		    	    write_success = write(i, buff, host_length+1);
+			    if (write_success == -1) {
+				perror("Error writing to server pipe.\n");
+			    }
+		    	}
+		    }
 
 		    // write this to master pipe
 
@@ -235,7 +260,7 @@ int main(int argc, char * argv[])
 		// user connect -> add user to linked list, tell users
 		// user message -> send to all users
 		else {
-		    
+		    printf("read data from a pipe!\n");
 		}
 	    }
 	    
