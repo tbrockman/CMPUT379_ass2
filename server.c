@@ -358,6 +358,7 @@ int main(int argc, char * argv[])
 
 			else if (event == USR_DISCONNECT) {
 			    printf("disconnect\n");
+			    // remove user from linked list somehow
 			}
 
 			else if (event == USR_MESSAGE) {
