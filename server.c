@@ -369,7 +369,7 @@ int main(int argc, char * argv[])
 		    
 		    if (worker == -1) {
 			perror("Parent fork error.\n");
-			exit(-1);
+			exit(1);
 		    }
 
 		    else if (worker == 0) {

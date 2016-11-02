@@ -7,6 +7,27 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Returns the length of a string, sets buffer to point to received string
+unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
+    unsigned short int length;
+    int success;
+
+    success = read(fd, &length, sizeof(length));
+    if (!success) {
+	return -1;
+    }
+
+    length = ntohs(length);
+
+    *buffer_ptr = malloc(length * sizeof(char));
+    
+    success = read(fd, *buffer_ptr, length * sizeof(char));
+    if (!success) {
+	return -1;
+    }
+    return length;
+}
+
 int main(int argc, char * argv[])
 {
     if (argc < 4) {
@@ -49,48 +70,125 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
-    //0xCF 0xA7 portion of the handshake
-    
-    int receive;
-    unsigned char buff[2];
-    receive = recv(sockfd, buff, sizeof(buff), 0);
+    pid_t background;
+    int fd[2];
 
-    if (!receive) {
-	perror("Error receiving handshake from server.");
+    pipe(fd);
+    background = fork();
+    
+    if (background == -1) {
+	perror("Error forking.\n");
 	exit(1);
     }
 
-    if ((buff[0] != 0xcf) || (buff[1] != 0xa7)) {
-	perror("Incorrect handshake from server.");
-	exit(1);
+    // child reads from server and parent
+    else if (background == 0) {
+	// close write end
+	close(fd[1]);
+
+	//0xCF 0xA7 portion of the handshake
+	int receive, fdmax;
+	unsigned char buff[2];
+	fd_set master_read_fds;
+	fd_set read_fds;
+
+	FD_ZERO(&read_fds);
+	FD_ZERO(&master_read_fds);
+
+	receive = recv(sockfd, buff, sizeof(buff), 0);
+
+	if (!receive) {
+	    perror("Error receiving handshake from server.");
+	    exit(1);
+	}
+
+	if ((buff[0] != 0xcf) || (buff[1] != 0xa7)) {
+	    perror("Incorrect handshake from server.");
+	    exit(1);
+	}
+
+	// Numbers of users
+
+	unsigned short int num_connected;
+	recv(sockfd, &num_connected, sizeof(num_connected), 0);
+	num_connected = ntohs(num_connected);
+
+	printf("Number of users: %hu\n", num_connected);
+
+	send(sockfd, &username_length, sizeof(unsigned short int), 0);
+	send(sockfd, username, username_length * sizeof(char), 0);
+	printf("Sent username length: %hu", ntohs(username_length));
+
+	FD_SET(sockfd, &master_read_fds);
+	FD_SET(fd[0], &master_read_fds);
+	
+	if (sockfd > fd[0]) {
+	    fdmax = sockfd;
+	}
+	else {
+	    fdmax = fd[0];
+	}
+	while(1) {
+	    read_fds = master_read_fds;
+	    if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+		perror("Error on slect\n");
+		exit(1);
+	    }
+
+	    for (int i =0; i <= fdmax; i++) {
+		if (FD_ISSET(i, &read_fds)) {
+		    // info from server;
+		    if (i == sockfd) {
+			
+		    }
+		    // stuff from pipe
+		    else {
+			char * buffer;
+			unsigned short int length;
+
+			if ((length = get_string_from_fd(fd[0], &buffer)) == -1) {
+			    perror("Error reading from pipe.\n");
+			    exit(1);
+			}
+			printf("heard from buffer: %s\n", buffer);
+			send(sockfd, buffer, sizeof(char) * length, 0);
+		    }
+		}
+	    }
+	}
     }
 
-    // Numbers of users
+    // parent reads from stdin and writes to pipe
+    else {
+	// close socket
+	close(sockfd);
 
-    unsigned short int num_connected;
-    recv(sockfd, &num_connected, sizeof(num_connected), 0);
-    num_connected = ntohs(num_connected);
+	// close pipe read
+	close(fd[0]);
 
-    printf("Number of users: %hu\n", num_connected);
-
-    send(sockfd, &username_length, sizeof(unsigned short int), 0);
-    send(sockfd, username, username_length * sizeof(char), 0);
-    printf("Sent username length: %hu", ntohs(username_length));
-
-    // List of usernames
-    
-    char *buffer;
-    int read;
-    size_t message_length = 0;
-    unsigned short int network_order;
-    while (1) {
-	//printf("%s> ", username);
-	read = getline(&buffer, &message_length, stdin);
-	network_order = htons(read-1);
-	printf("sent: %hu\n", ntohs(network_order));
-	send(sockfd, &network_order, sizeof(network_order), 0);
-	send(sockfd, buffer, read-1, 0);
+	// List of usernames
+	char * buffer;
+	int read, error;
+	size_t message_length = 0;
+	unsigned short int network_order;
+	while (1) {
+	    //printf("%s> ", username);
+	    read = getline(&buffer, &message_length, stdin);
+	    network_order = htons(read-1);
+	    printf("sent: %hu\n", ntohs(network_order));
+	    error = write(fd[1], &network_order, sizeof(network_order));
+	    if (error == -1) {
+		perror("Pipe write error.\n");
+		exit(1);
+	    }
+	    error = write(fd[1], buffer, read-1);
+	    if (error == -1) {
+		perror("Pipe write error.\n");
+		exit(1);
+	    }
+	}
+	return 0;
     }
-    return 0;
+
 }
 
