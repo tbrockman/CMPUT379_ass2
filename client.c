@@ -54,7 +54,7 @@ int main(int argc, char * argv[])
 
     struct sockaddr_in localaddr;
     localaddr.sin_family = AF_INET;
-    localaddr.sin_addr.s_addr = inet_addr("192.168.1.100");
+    localaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     localaddr.sin_port = 0;
     if (bind(sockfd, (struct sockaddr *)&localaddr, sizeof(localaddr))==-1){
 	perror("Error binding.\n");
@@ -115,6 +115,8 @@ int main(int argc, char * argv[])
 
 	printf("Number of users: %hu\n", num_connected);
 
+	// Username list (malloc num_connected * sizeof(char*))
+
 	send(sockfd, &username_length, sizeof(unsigned short int), 0);
 	send(sockfd, username, username_length * sizeof(char), 0);
 	printf("Sent username length: %hu", ntohs(username_length));
@@ -160,13 +162,9 @@ int main(int argc, char * argv[])
 
     // parent reads from stdin and writes to pipe
     else {
-	// close socket
-	close(sockfd);
+	close(sockfd); // close socket
+	close(fd[0]); // close pipe read
 
-	// close pipe read
-	close(fd[0]);
-
-	// List of usernames
 	char * buffer;
 	int read, error;
 	size_t message_length = 0;
