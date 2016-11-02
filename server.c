@@ -24,6 +24,22 @@ int count_nodes() {
     return count;
 }
 
+int username_exists(char * username_ptr) {
+    struct node * current;
+    current = user_linked_list_ptr;
+    if (current && *(current->username_ptr) == *username_ptr) {
+	return 1;
+    }
+
+    while (current && current->next) {
+	current = current->next;
+	if (*(current->username_ptr) == *username_ptr) {
+	    return 1;
+	}
+    }
+    return 0;
+}
+
 struct node * create_node(char * text, unsigned short int length) {
     struct node * new_node;
 
@@ -48,20 +64,22 @@ struct node * create_node(char * text, unsigned short int length) {
 }
 
 // Returns the length of a string, sets buffer to point to received string
-unsigned short int get_string_from_socket(int socket, char ** buffer_ptr) {
+unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
     unsigned short int length;
     int success;
 
-    success = recv(socket, &length, sizeof(length));
+    success = read(fd, &length, sizeof(length));
     if (!success) {
-	return -1
+	return -1;
     }
 
-    *buffer = malloc(length * sizeof(char));
+    length = ntohs(length);
+
+    *buffer_ptr = malloc(length * sizeof(char));
     
-    success = recv(socket, *buffer, length * sizeof(char));
+    success = read(fd, *buffer_ptr, length * sizeof(char));
     if (!success) {
-	return -1
+	return -1;
     }
     return length;
 }
@@ -81,7 +99,7 @@ int main(int argc, char * argv[])
 
     daemon(0, 1); // change 1 to 0 when no longer testing
 
-    int sock, fdmax, clientfd;
+    int sock, fdmax, clientfd, child_read, needs_to_connect;
     int * timeperiod;
     pid_t current_pid;
     struct sockaddr_in sa;
@@ -159,7 +177,7 @@ int main(int argc, char * argv[])
                     clientfd = accept(sock, (struct sockaddr *)&remoteaddr, &addrlen);
                     if (clientfd == -1) {
                         perror("Error accepting client connection.");
-                    } 
+                    }
 
 		    int fd_parent[2];
 		    int fd_child[2];
@@ -185,10 +203,13 @@ int main(int argc, char * argv[])
 			    fdmax = fd_child[0];
 			}
 
+			
 			for (int x = 0; x <= fdmax; x++) {
-			    if (!(x == fd_child[0] || x == fd_parent[1] ||
-				  x == clientfd)) {
-				close(x); // close all fds we don't need
+			    if (x != fd_child[0] && x != fd_parent[1] &&
+				x != clientfd && x != fileno(stdout)) {
+				if (close(x) == -1) {
+				    perror("Error closing child FD\n");
+				}
 			    }
 			}
 
@@ -197,27 +218,26 @@ int main(int argc, char * argv[])
 			FD_SET(fd_parent[1], &master_write_fds); // add parent write
 			FD_SET(fd_child[0], &master_read_fds); // add child read
 			FD_SET(clientfd, &master_read_fds); // add client to read
+			child_read = child[0];
 
 			// we now need to communicate with the client
 			int n;
 			unsigned short int length;
 			char * buffer;
 			n = htons((0xCF << 8) + 0xA7);
-			printf("sending to clientfd: %d\n", clientfd);
-			send(clientfd, (const void *)(&n), sizeof(n), 0);
+
+			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
+			    perror("Error sending handshake to client.\n");
+			    exit(-1);
+			}
 			n = htons(count_nodes());
-			send(clientfd, (const void *)(&n), sizeof(n), 0);
-			if (get_string_from_socket(clientfd, &buffer) == -1) {
-			    // tell server to disconnect
-			    exit(1);
+			
+			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
+			    perror("Error sending # of users to client.\n");
+			    exit(-1);
 			}
-			else {
-			    printf("heard username: %s\n", buffer);
-			    exit(1);
-			    // inspect username, does it exit
-			    // add to node
-			    // tell parent to send user update
-			}
+			
+			needs_to_connect = 1;
 		    }
 		    
 		    else {
@@ -225,7 +245,6 @@ int main(int argc, char * argv[])
 			close(fd_child[0]); // close child read;
 			close(fd_parent[1]); // close parent write;
 			close(clientfd); // close accepted socket, 
-			printf("Shutdown socket FD in parent.\n");
 			FD_SET(fd_parent[0], &master_read_fds); // add parent read
 			FD_SET(fd_child[1], &master_write_fds); // add child write
 
@@ -239,35 +258,36 @@ int main(int argc, char * argv[])
 		    }
 		}
 
-		// we are a child, we have data from a socket
+		// we are a child and we have data from a socket
 		else if (i == clientfd) {
-		    unsigned short int network_length;
 		    unsigned short int host_length;
+		    char event;
 		    char * buff;
-		    int receive;
-		    receive = recv(clientfd, &network_length, sizeof(network_length), 0);
-		    if (!receive) {
-			perror("Client disconnect.\n");
-			exit(1);
+		    pid_t pid_here;
+		    
+		    pid_here = getpid();
+		    printf("here: pid %d\n", pid_here);
+		    host_length = get_string_from_fd(clientfd, &buff);
+
+		    if (needs_to_connect) {
+			event = 1;
+			needs_to_connect = 0;
 		    }
 
-		    host_length = ntohs(network_length);
-		    buff = malloc((host_length + 1) * sizeof(char));
-		    receive = recv(clientfd, buff, host_length, 0);
-		    if (!receive) {
-			perror("Client disconnect.\n");
-			exit(1);
+		    else {
+			event = 0;
 		    }
 
 		    if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
 			perror("Error on write select\n");
-			exit(1);
+			exit(-1);
 		    }
 
 		    // write to parents pipe
 		    for(int j = 0; j <= fdmax; j++) {
 		    	if (FD_ISSET(j, &write_fds)) {
-			    printf("writing length:'%d' and string:'%s' to j: %d\n", host_length+1, buff, j);
+			    printf("writing length:'%hu' and string:'%s' to j: %d\n", host_length, buff, j);
+			    write(j, &event, sizeof(int));
 			    write(j, &host_length, sizeof(host_length));
 		    	    write(j, buff, host_length);
 		    	}
@@ -275,6 +295,27 @@ int main(int argc, char * argv[])
 
 		    free(buff);
 
+		}
+
+		// we're in the child and have data from the parent
+		else if (i == child_read) {
+		    int event;
+		    read(i, &event, sizeof(int));
+		    if (event == USR_INVALID) {
+			exit(1);
+		    }
+
+		    else if (event == USR_DISCONNECT) {
+			// send to client fd that user disconnected
+		    }
+
+		    else if (event == USR_CONNECT) {
+			// send to client fd that user connected
+		    }
+
+		    else if (event == USR_MESSAGE) {
+			// send to client fd user message
+		    }
 		}
 
 		// other we have read data from a pipe
@@ -298,18 +339,28 @@ int main(int argc, char * argv[])
 
 		    else if (worker == 0) {
 			unsigned short int read_length;
-			char event;
+			int event;
 			char * read_buff;
 
-			read(i, &event, sizeof(char));
+			read(i, &event, sizeof(int));
 		    
-			if (event == CONNECT) {
-			    printf("connect\n");
+			if (event == USR_CONNECT) {
+			    read_length = get_string_from_fd(i, &read_buff);
+			    printf("Username '%s' connected.\n", read_buff);
+			    int exists;
+			    exists = username_exists(read_buff);
+			    if (exists) {
+				int disconnect = USR_INVALID;
+				write(i, &disconnect, sizeof(int));
+			    }
+			    create_node(read_buff, read_length);
 			}
-			else if (event == DISCONNECT) {
+
+			else if (event == USR_DISCONNECT) {
 			    printf("disconnect\n");
 			}
-			else if (event == MESSAGE) {
+
+			else if (event == USR_MESSAGE) {
 			    printf("message\n");
 			}
 

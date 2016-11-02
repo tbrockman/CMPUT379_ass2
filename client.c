@@ -5,7 +5,7 @@
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <strings.h>
+#include <string.h>
 
 int main(int argc, char * argv[])
 {
@@ -17,9 +17,12 @@ int main(int argc, char * argv[])
     char * hostname;
     char * port_no;
     char * username;
+    int username_length;
     hostname = argv[1];
     port_no = argv[2];
     username = argv[3];
+
+    username_length = htons(strlen(username));
     
     // Error checking omitted for expository purposes
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -45,11 +48,18 @@ int main(int argc, char * argv[])
 
     //0xCF 0xA7 portion of the handshake
     
+    int receive;
     unsigned char buff[2];
-    recv(sockfd, buff, sizeof(buff), 0);
+    receive = recv(sockfd, buff, sizeof(buff), 0);
 
-    if (buff[0] != 0xcf || buff[1] != 0xa7) {
+    if (!receive) {
+	perror("Error receiving handshake from server.");
+	exit(-1);
+    }
+
+    if ((buff[0] != 0xcf) || (buff[1] != 0xa7)) {
 	perror("Incorrect handshake from server.");
+	exit(-1);
     }
 
     // Numbers of users
@@ -60,9 +70,13 @@ int main(int argc, char * argv[])
 
     printf("Number of users: %hu\n", num_connected);
 
+    send(sockfd, &username_length, sizeof(unsigned short int), 0);
+    send(sockfd, username, username_length * sizeof(char), 0);
+    printf("Sent username length: %hu", ntohs(username_length));
+
     // List of usernames
     
-    char *buffer = NULL;
+    char *buffer;
     int read;
     size_t message_length = 0;
     unsigned short int network_order;
