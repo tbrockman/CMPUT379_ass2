@@ -141,6 +141,12 @@ int main(int argc, char * argv[])
 		if (FD_ISSET(i, &read_fds)) {
 		    // info from server;
 		    if (i == sockfd) {
+			char type;
+			if (recv(sockfd, &type, sizeof(char), 0) == -1) {
+			    perror("Error reading from socket.\n");
+			    exit(1);
+			}
+			// 0x00, 0x01, or 0x02
 			
 		    }
 		    // stuff from pipe
