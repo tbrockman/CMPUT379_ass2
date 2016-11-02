@@ -24,7 +24,6 @@ int main(int argc, char * argv[])
 
     username_length = htons(strlen(username));
     
-    // Error checking omitted for expository purposes
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if (sockfd < -1) {
@@ -32,19 +31,23 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
-    // Bind to a specific network interface (and optionally a specific local port)
     struct sockaddr_in localaddr;
     localaddr.sin_family = AF_INET;
     localaddr.sin_addr.s_addr = inet_addr("192.168.1.100");
-    localaddr.sin_port = 0;  // Any local port will do
-    bind(sockfd, (struct sockaddr *)&localaddr, sizeof(localaddr));
+    localaddr.sin_port = 0;
+    if (bind(sockfd, (struct sockaddr *)&localaddr, sizeof(localaddr))==-1){
+	perror("Error binding.\n");
+	exit(1);
+    }
 
-    // Connect to the remote server
     struct sockaddr_in remoteaddr;
     remoteaddr.sin_family = AF_INET;
     remoteaddr.sin_addr.s_addr = inet_addr(hostname);
     remoteaddr.sin_port = htons(atoi(port_no));
-    connect(sockfd, (struct sockaddr *)&remoteaddr, sizeof(remoteaddr));
+    if (connect(sockfd, (struct sockaddr *)&remoteaddr, sizeof(remoteaddr))==-1){
+	perror("Error connecting.\n");
+	exit(1);
+    }
 
     //0xCF 0xA7 portion of the handshake
     
@@ -54,12 +57,12 @@ int main(int argc, char * argv[])
 
     if (!receive) {
 	perror("Error receiving handshake from server.");
-	exit(-1);
+	exit(1);
     }
 
     if ((buff[0] != 0xcf) || (buff[1] != 0xa7)) {
 	perror("Incorrect handshake from server.");
-	exit(-1);
+	exit(1);
     }
 
     // Numbers of users

@@ -3,7 +3,7 @@
 #define USR_MESSAGE 0
 #define USR_CONNECT 1
 #define USR_DISCONNECT 2
-#define KILL 3
+#define CHILD_SUICIDE 3 // the most descriptive name I could think of -Theo
 
 struct node {
     unsigned short int length;

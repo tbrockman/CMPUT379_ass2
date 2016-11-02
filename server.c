@@ -13,29 +13,59 @@
 int GLOBAL_PORT;
 struct node * user_linked_list_ptr;
 
-int count_nodes() {
+int count_nodes(char *** array_ptr_ptr) {
     int count = 0;
+    int array_size = 1;
     struct node * current;
     current = user_linked_list_ptr;
-    while (current && current->next) {
+    *array_ptr_ptr = malloc(sizeof (char * ) * 1);
+    while (current) {
+	// is our array full?
+	if (array_size == count+1) {
+	    // double size of array;
+	    array_size *= 2;
+	    *array_ptr_ptr = realloc(*array_ptr_ptr, sizeof(char *) * array_size);
+	}
+	// allocate memory for username
+	(*array_ptr_ptr)[count] = (current->username_ptr);
 	current = current->next;
 	count++;
     }
     return count;
 }
 
+int remove_node(char * username_ptr) {
+    struct node * current;
+    struct node * last;
+    current = user_linked_list_ptr;
+    while (current) {
+	if (strcmp(current->username_ptr, username_ptr) == 0) {
+	    if (last) {
+		last->next = current->next;
+	    }
+
+	    else {
+		user_linked_list_ptr = current->next;
+	    }
+
+	    free(current);
+	    return 1;
+	}
+	last = current;
+	current = current->next;
+    }
+    return 0;
+}
+
 int username_exists(char * username_ptr) {
     struct node * current;
     current = user_linked_list_ptr;
-    if (current && *(current->username_ptr) == *username_ptr) {
-	return 1;
-    }
 
-    while (current && current->next) {
-	current = current->next;
-	if (*(current->username_ptr) == *username_ptr) {
+    while (current) {
+	if (strcmp(current->username_ptr, username_ptr) == 0) {
 	    return 1;
 	}
+	current = current->next;
     }
     return 0;
 }
@@ -218,11 +248,12 @@ int main(int argc, char * argv[])
 			FD_SET(fd_parent[1], &master_write_fds); // add parent write
 			FD_SET(fd_child[0], &master_read_fds); // add child read
 			FD_SET(clientfd, &master_read_fds); // add client to read
-			child_read = child[0];
+			child_read = fd_child[0];
 
 			// we now need to communicate with the client
 			int n;
 			unsigned short int length;
+			char ** users_ptr;
 			char * buffer;
 			n = htons((0xCF << 8) + 0xA7);
 
@@ -230,13 +261,17 @@ int main(int argc, char * argv[])
 			    perror("Error sending handshake to client.\n");
 			    exit(-1);
 			}
-			n = htons(count_nodes());
+
+			n = htons(count_nodes(&users_ptr));
 			
 			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
 			    perror("Error sending # of users to client.\n");
 			    exit(-1);
 			}
 			
+
+			// send user list
+
 			needs_to_connect = 1;
 		    }
 		    
@@ -301,7 +336,7 @@ int main(int argc, char * argv[])
 		else if (i == child_read) {
 		    int event;
 		    read(i, &event, sizeof(int));
-		    if (event == USR_INVALID) {
+		    if (event == CHILD_SUICIDE) {
 			exit(1);
 		    }
 
@@ -350,7 +385,7 @@ int main(int argc, char * argv[])
 			    int exists;
 			    exists = username_exists(read_buff);
 			    if (exists) {
-				int disconnect = USR_INVALID;
+				int disconnect = CHILD_SUICIDE;
 				write(i, &disconnect, sizeof(int));
 			    }
 			    create_node(read_buff, read_length);
