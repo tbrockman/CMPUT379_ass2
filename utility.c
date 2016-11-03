@@ -28,16 +28,16 @@ int count_nodes_and_return_usernames(char *** array_ptr_ptr, struct node * head)
 
 int remove_node(char * username_ptr, struct node ** head_ptr_ptr) {
     struct node * current;
-    struct node * last;
+    struct node * last_node;
     current = *head_ptr_ptr;
     while (current) {
 	printf("here\n");
 	if (strcmp(current->username_ptr, username_ptr) == 0) {
-	    if (last) {
+	    if (last_node) {
 		printf("looking for: %s\n", username_ptr);
-		printf("last: %s\n", last->username_ptr);
+		printf("last: %s\n", last_node->username_ptr);
 		printf("sahold not be here\n");
-		last->next = current->next;
+		last_node->next = current->next;
 	    }
 
 	    else {
@@ -49,7 +49,7 @@ int remove_node(char * username_ptr, struct node ** head_ptr_ptr) {
 	    return 1;
 	}
 	printf("set last??\n");
-	last = current;
+	last_node = current;
 	current = current->next;
     }
     return 0;
