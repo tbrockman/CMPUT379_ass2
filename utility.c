@@ -1,5 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+#include <arpa/inet.h>
 #include "utility.h"
 
 int count_nodes_and_return_usernames(char *** array_ptr_ptr, struct node * head) {
@@ -23,10 +25,10 @@ int count_nodes_and_return_usernames(char *** array_ptr_ptr, struct node * head)
     return count;
 }
 
-int remove_node(char * username_ptr) {
+int remove_node(char * username_ptr, struct node ** head_ptr_ptr) {
     struct node * current;
     struct node * last;
-    current = user_linked_list_ptr;
+    current = *head_ptr_ptr;
     while (current) {
 	if (strcmp(current->username_ptr, username_ptr) == 0) {
 	    if (last) {
@@ -34,7 +36,7 @@ int remove_node(char * username_ptr) {
 	    }
 
 	    else {
-		user_linked_list_ptr = current->next;
+		*head_ptr_ptr = current->next;
 	    }
 
 	    free(current);
@@ -46,9 +48,9 @@ int remove_node(char * username_ptr) {
     return 0;
 }
 
-int username_exists(char * username_ptr) {
+int username_exists(char * username_ptr, struct node * head) {
     struct node * current;
-    current = user_linked_list_ptr;
+    current = head;
 
     while (current) {
 	if (strcmp(current->username_ptr, username_ptr) == 0) {
@@ -59,7 +61,7 @@ int username_exists(char * username_ptr) {
     return 0;
 }
 
-struct node * create_node(char * text, unsigned short int length) {
+struct node * create_node(char * text, unsigned short int length, int socket_fd, struct node ** head_ptr_ptr) {
     struct node * new_node;
 
     new_node = (struct node *)malloc(sizeof(struct node));
@@ -67,12 +69,12 @@ struct node * create_node(char * text, unsigned short int length) {
     new_node->length = length;
     new_node->next = NULL;
 
-    if (!user_linked_list_ptr) {
-	user_linked_list_ptr = new_node;
+    if (!*head_ptr_ptr) {
+	*head_ptr_ptr = new_node;
     }
     else {
 	struct node * current;
-	current = user_linked_list_ptr;
+	current = *head_ptr_ptr;
 	while (current->next) {
 	    current = current->next;
 	}

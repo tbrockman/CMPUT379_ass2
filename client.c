@@ -8,27 +8,6 @@
 #include <string.h>
 #include "utility.h"
 
-// Returns the length of a string, sets buffer to point to received string
-unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
-    unsigned short int length;
-    int success;
-
-    success = read(fd, &length, sizeof(length));
-    if (!success) {
-	return -1;
-    }
-
-    length = ntohs(length);
-
-    *buffer_ptr = malloc(length * sizeof(char));
-    
-    success = read(fd, *buffer_ptr, length * sizeof(char));
-    if (!success) {
-	return -1;
-    }
-    return length;
-}
-
 int main(int argc, char * argv[])
 {
     if (argc < 4) {
@@ -40,6 +19,7 @@ int main(int argc, char * argv[])
     char * port_no;
     char * username;
     int username_length;
+    struct node * user_linked_list_ptr;
     hostname = argv[1];
     port_no = argv[2];
     username = argv[3];

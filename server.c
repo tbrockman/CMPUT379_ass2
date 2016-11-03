@@ -13,107 +13,6 @@
 int GLOBAL_PORT;
 struct node * user_linked_list_ptr;
 
-int count_nodes(char *** array_ptr_ptr) {
-    int count = 0;
-    int array_size = 1;
-    struct node * current;
-    current = user_linked_list_ptr;
-    *array_ptr_ptr = malloc(sizeof (char * ) * 1);
-    while (current) {
-	// is our array full?
-	if (array_size == count+1) {
-	    // double size of array;
-	    array_size *= 2;
-	    *array_ptr_ptr = realloc(*array_ptr_ptr, sizeof(char *) * array_size);
-	}
-	// allocate memory for username
-	(*array_ptr_ptr)[count] = (current->username_ptr);
-	current = current->next;
-	count++;
-    }
-    return count;
-}
-
-int remove_node(char * username_ptr) {
-    struct node * current;
-    struct node * last;
-    current = user_linked_list_ptr;
-    while (current) {
-	if (strcmp(current->username_ptr, username_ptr) == 0) {
-	    if (last) {
-		last->next = current->next;
-	    }
-
-	    else {
-		user_linked_list_ptr = current->next;
-	    }
-
-	    free(current);
-	    return 1;
-	}
-	last = current;
-	current = current->next;
-    }
-    return 0;
-}
-
-int username_exists(char * username_ptr) {
-    struct node * current;
-    current = user_linked_list_ptr;
-
-    while (current) {
-	if (strcmp(current->username_ptr, username_ptr) == 0) {
-	    return 1;
-	}
-	current = current->next;
-    }
-    return 0;
-}
-
-struct node * create_node(char * text, unsigned short int length) {
-    struct node * new_node;
-
-    new_node = (struct node *)malloc(sizeof(struct node));
-    new_node->username_ptr = text;
-    new_node->length = length;
-    new_node->next = NULL;
-
-    if (!user_linked_list_ptr) {
-	user_linked_list_ptr = new_node;
-    }
-    else {
-	struct node * current;
-	current = user_linked_list_ptr;
-	while (current->next) {
-	    current = current->next;
-	}
-	current->next = new_node;
-    }
-
-    return new_node;
-}
-
-// Returns the length of a string, sets buffer to point to received string
-unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
-    unsigned short int length;
-    int success;
-
-    success = read(fd, &length, sizeof(length));
-    if (!success) {
-	return -1;
-    }
-
-    length = ntohs(length);
-
-    *buffer_ptr = malloc(length * sizeof(char));
-    
-    success = read(fd, *buffer_ptr, length * sizeof(char));
-    if (!success) {
-	return -1;
-    }
-    return length;
-}
-
 void sigterm_handler(int signo) {
     printf("Terminating...\n");
     //for each user, disconnect their sockets
@@ -262,7 +161,7 @@ int main(int argc, char * argv[])
 			    exit(-1);
 			}
 
-			n = htons(count_nodes(&users_ptr));
+			n = htons(count_nodes_and_return_usernames(&users_ptr, user_linked_list_ptr));
 			
 			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
 			    perror("Error sending # of users to client.\n");
@@ -383,12 +282,12 @@ int main(int argc, char * argv[])
 			    read_length = get_string_from_fd(i, &read_buff);
 			    printf("Username '%s' connected.\n", read_buff);
 			    int exists;
-			    exists = username_exists(read_buff);
+			    exists = username_exists(read_buff, user_linked_list_ptr);
 			    if (exists) {
 				int disconnect = CHILD_SUICIDE;
 				write(i, &disconnect, sizeof(int));
 			    }
-			    create_node(read_buff, read_length);
+			    // need to tell parent to create the node;
 			}
 
 			else if (event == USR_DISCONNECT) {
