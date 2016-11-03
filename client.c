@@ -77,6 +77,12 @@ int main(int argc, char * argv[])
 
     else if (background == 0) {
 
+	if (getppid() == 1) {
+	    printf("Parent closed.\n");
+	    exit(1);
+	}
+
+
 	//0xCF 0xA7 portion of the handshake
 	int receive, fdmax;
 	unsigned char buff[2];
@@ -86,10 +92,11 @@ int main(int argc, char * argv[])
 	FD_ZERO(&read_fds);
 	FD_ZERO(&master_read_fds);
 	close(fd_pipe[1]); // close write end of the pipe
+	close(fileno(stdin));
 
 	receive = recv(sockfd, buff, sizeof(buff), 0);
 
-	if (!receive) {
+	if (receive == -1) {
 	    perror("Error receiving handshake from server.");
 	    exit(1);
 	}
@@ -104,7 +111,11 @@ int main(int argc, char * argv[])
 	// Numbers of users
 
 	unsigned short int num_connected;
-	recv(sockfd, &num_connected, sizeof(num_connected), 0);
+	if (recv(sockfd, &num_connected, sizeof(num_connected), 0) == -1) {
+	    perror("Error retrieving number of users.\n");
+	    exit(1);
+	}
+
 	num_connected = ntohs(num_connected);
 
 	printf("Number of users: %hu\n", num_connected);
@@ -112,9 +123,16 @@ int main(int argc, char * argv[])
 	// Username list (malloc num_connected * sizeof(char*))
 
 	read_users_into_linked_list(sockfd, num_connected, &user_linked_list_ptr);
+	if (send(sockfd, &username_length, sizeof(unsigned short int), 0) == -1) {
+	    perror("Error sending username.\n");
+	    exit(1);
+	}
 
-	send(sockfd, &username_length, sizeof(unsigned short int), 0);
-	send(sockfd, username, username_length * sizeof(char), 0);
+	if (send(sockfd, username, username_length * sizeof(char), 0) == -1) {
+	    perror("Error sending username.\n");
+	    exit(1);
+	}
+	
 	printf("Sent username length: %hu", ntohs(username_length));
 
 	FD_SET(sockfd, &master_read_fds);
@@ -148,30 +166,35 @@ int main(int argc, char * argv[])
 			    exit(1);
 			}
 
-			length = get_string_from_fd(sockfd, &text_buffer);
+			if ((length = get_string_from_fd(sockfd, &text_buffer)) == -1) {
+			    perror("Error reading from socket.\n");
+			    exit(1);
+			}
 
 			if (type == USR_MESSAGE) {
-			    printf("%s\n", text_buffer);
+			    //printf("%s\n", text_buffer);
 			}
 
 			else if (type == USR_CONNECT) {
-			    printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
+			    //printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
 			    create_node(text_buffer, length, 0, &user_linked_list_ptr);
 			}
 
 			else if (type == USR_DISCONNECT) {
-			    printf("< User \"%s\" has left the chat.\n", text_buffer);
+			    //printf("< User \"%s\" has left the chat.\n", text_buffer);
 			    remove_node(text_buffer, &user_linked_list_ptr);
 			}
 		    }
 
 		    // pipe info from stdin, process commands
-		    else {
-			if (read(sockfd, &type, sizeof(int)) == -1) {
-			    perror("Error reading from socket.\n");
+		    else if (i == fd_pipe[0]) {
+			int read_status;
+			read_status = read(fd_pipe[0], &type, sizeof(int));
+			if (read_status == -1 || read_status == 0) {
+			    close(fd_pipe[0]);
+			    perror("Error reading from parent pipe.\n");
 			    exit(1);
 			}
-			
 
 			// could allow for multiple commands, currently
 			// only the one
@@ -181,10 +204,13 @@ int main(int argc, char * argv[])
 			    char ** usernames;
 			    node_count = count_nodes_and_return_usernames(&usernames, user_linked_list_ptr);
 			    printf("Users currently in chat:\n");
-			    //for (int i = 0; i < node_count; i++) {
-			    //		printf("%s\n", usernames[i]);
-			    //}
+			    for (int i = 0; i < node_count; i++) {
+			    		printf("%s\n", usernames[i]);
+			    }
 			}
+		    }
+		    else {
+			exit(1);
 		    }
 		}
 	    }
@@ -204,24 +230,30 @@ int main(int argc, char * argv[])
 	while (1) {
 	    //printf("%s> ", username);
 	    read = getline(&buffer, &message_length, stdin);
-	    if (strcmp(buffer, "/list") == 0) {
-		printf("Shoud list\n");
-		if (write(fd_pipe[1], LIST_USERS, sizeof(int)) == -1) {
+	    if (strcmp(buffer, "/list\n") == 0) {
+		int command;
+		command = LIST_USERS;
+		if (write(fd_pipe[1], &command, sizeof(int)) == -1) {
 		    perror("Socket write error.\n");
 		    exit(1);
 		}
 	    }
-	    network_order = htons(read-1);
-	    error = write(sockfd, &network_order, sizeof(network_order));
-	    if (error == -1) {
-		perror("Client socket write error.\n");
-		exit(1);
+	    else {
+		network_order = htons(read-1);
+		error = send(sockfd, &network_order, sizeof(network_order), 0);
+		if (error == -1) {
+		    close(sockfd);
+		    perror("Client socket write error.\n");
+		    exit(1);
+		}
+		error = write(sockfd, buffer, sizeof(char) * message_length);
+		if (error == -1) {
+		    close(sockfd);
+		    perror("Client socket write error.\n");
+		    exit(1);
+		}
 	    }
-	    error = write(sockfd, buffer, sizeof(char) * message_length);
-	    if (error == -1) {
-		perror("Client socket write error.\n");
-		exit(1);
-	    }
+
 	}
 	return 0;
     }

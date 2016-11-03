@@ -90,7 +90,7 @@ unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
     int success;
 
     success = read(fd, &length, sizeof(length));
-    if (!success) {
+    if (success == -1) {
 	return -1;
     }
 
@@ -99,7 +99,7 @@ unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
     *buffer_ptr = malloc(length * sizeof(char));
     
     success = read(fd, *buffer_ptr, length * sizeof(char));
-    if (!success) {
+    if (success == -1) {
 	return -1;
     }
     return length;
