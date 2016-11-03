@@ -30,25 +30,19 @@ int remove_node(char * username_ptr, struct node ** head_ptr_ptr) {
     struct node * current;
     struct node * last_node;
     current = *head_ptr_ptr;
+    last_node = current;
     while (current) {
-	printf("here\n");
 	if (strcmp(current->username_ptr, username_ptr) == 0) {
-	    if (last_node) {
-		printf("looking for: %s\n", username_ptr);
-		printf("last: %s\n", last_node->username_ptr);
-		printf("sahold not be here\n");
+	    if (last_node && last_node != current) {
 		last_node->next = current->next;
 	    }
 
 	    else {
-		printf("reassigning\n");
 		*head_ptr_ptr = current->next;
 	    }
-	    printf("removed: %s\n", current->username_ptr);
 	    free(current);
 	    return 1;
 	}
-	printf("set last??\n");
 	last_node = current;
 	current = current->next;
     }

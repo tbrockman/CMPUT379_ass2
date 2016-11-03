@@ -26,11 +26,6 @@ int main(int argc, char * argv[])
 	printf("Not enough specified arguments.\n");
 	exit(1);
     }
-
-    char test[10] = "abcd";
-    char test2[10] = "Poop";
-    char test3[10] = "TheDude";
-    char test4[10] =  "HotBabe69";
     
     char * hostname;
     char * port_no;
@@ -39,18 +34,6 @@ int main(int argc, char * argv[])
     hostname = argv[1];
     port_no = argv[2];
     username = argv[3];
-
-    create_node(test, 10, 0, &user_linked_list_ptr);
-    create_node(test2, 10, 0, &user_linked_list_ptr);
-    create_node(test3, 10, 0, &user_linked_list_ptr);
-    create_node(test4, 10, 0, &user_linked_list_ptr);
-    printf("or here??\n");
-    remove_node(test, &user_linked_list_ptr);
-    printf("current head: %s\n" , user_linked_list_ptr->username_ptr);
-    int test12;
-    char ** usernames;
-    test12 = count_nodes_and_return_usernames(&usernames, user_linked_list_ptr);
-    printf("user count: %d\n", test12);
 
     username_length = htons(strlen(username));
     
