@@ -62,7 +62,10 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
+    int fd_pipe[2];
     pid_t background;
+    
+    pipe(fd_pipe);
     background = fork();
     
     if (background == -1) {
@@ -82,6 +85,7 @@ int main(int argc, char * argv[])
 
 	FD_ZERO(&read_fds);
 	FD_ZERO(&master_read_fds);
+	close(fd_pipe[1]); // close write end of the pipe
 
 	receive = recv(sockfd, buff, sizeof(buff), 0);
 
@@ -94,6 +98,8 @@ int main(int argc, char * argv[])
 	    perror("Incorrect handshake from server.");
 	    exit(1);
 	}
+
+	fdmax = sockfd;
 
 	// Numbers of users
 
@@ -112,7 +118,14 @@ int main(int argc, char * argv[])
 	printf("Sent username length: %hu", ntohs(username_length));
 
 	FD_SET(sockfd, &master_read_fds);
-	fdmax = sockfd;
+	FD_SET(fd_pipe[0], &master_read_fds);
+
+	if (fd_pipe[0] > sockfd) {
+	    fdmax = fd_pipe[0];
+	}
+	else {
+	    fdmax = sockfd; // if they're the same who cares
+	}
 
 	while(1) {
 	    read_fds = master_read_fds;
@@ -124,10 +137,11 @@ int main(int argc, char * argv[])
 	    for (int i =0; i <= fdmax; i++) {
 		if (FD_ISSET(i, &read_fds)) {
 		    // info from server;
+		    int type;
+		    unsigned short int length;
+		    char * text_buffer;
+
 		    if (i == sockfd) {
-			int type;
-			unsigned short int length;
-			char * text_buffer;
 
 			if (recv(sockfd, &type, sizeof(int), 0) == -1) {
 			    perror("Error reading from socket.\n");
@@ -150,6 +164,28 @@ int main(int argc, char * argv[])
 			    remove_node(text_buffer, &user_linked_list_ptr);
 			}
 		    }
+
+		    // pipe info from stdin, process commands
+		    else {
+			if (read(sockfd, &type, sizeof(int)) == -1) {
+			    perror("Error reading from socket.\n");
+			    exit(1);
+			}
+			
+
+			// could allow for multiple commands, currently
+			// only the one
+
+			if (type == LIST_USERS) {
+			    int node_count;
+			    char ** usernames;
+			    node_count = count_nodes_and_return_usernames(&usernames, user_linked_list_ptr);
+			    printf("Users currently in chat:\n");
+			    //for (int i = 0; i < node_count; i++) {
+			    //		printf("%s\n", usernames[i]);
+			    //}
+			}
+		    }
 		}
 	    }
 	}
@@ -162,9 +198,19 @@ int main(int argc, char * argv[])
 	int read, error;
 	size_t message_length = 0;
 	unsigned short int network_order;
+
+	close(fd_pipe[0]); // close read end
+
 	while (1) {
 	    //printf("%s> ", username);
 	    read = getline(&buffer, &message_length, stdin);
+	    if (strcmp(buffer, "/list") == 0) {
+		printf("Shoud list\n");
+		if (write(fd_pipe[1], LIST_USERS, sizeof(int)) == -1) {
+		    perror("Socket write error.\n");
+		    exit(1);
+		}
+	    }
 	    network_order = htons(read-1);
 	    error = write(sockfd, &network_order, sizeof(network_order));
 	    if (error == -1) {

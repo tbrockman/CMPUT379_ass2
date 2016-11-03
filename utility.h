@@ -4,6 +4,7 @@
 #define USR_CONNECT 1
 #define USR_DISCONNECT 2
 #define CHILD_SUICIDE 3 // the most descriptive name I could think of
+#define LIST_USERS 4
 
 struct node {
     unsigned short int length;
