@@ -8,7 +8,7 @@
 #include <signal.h>
 #include <arpa/inet.h>
 #include <netdb.h>
-#include "server.h"
+#include "utility.h"
 
 int GLOBAL_PORT;
 struct node * user_linked_list_ptr;

@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "utility.h"
 
 // Returns the length of a string, sets buffer to point to received string
 unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
