@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -30,18 +31,24 @@ int remove_node(char * username_ptr, struct node ** head_ptr_ptr) {
     struct node * last;
     current = *head_ptr_ptr;
     while (current) {
+	printf("here\n");
 	if (strcmp(current->username_ptr, username_ptr) == 0) {
 	    if (last) {
+		printf("looking for: %s\n", username_ptr);
+		printf("last: %s\n", last->username_ptr);
+		printf("sahold not be here\n");
 		last->next = current->next;
 	    }
 
 	    else {
+		printf("reassigning\n");
 		*head_ptr_ptr = current->next;
 	    }
-
+	    printf("removed: %s\n", current->username_ptr);
 	    free(current);
 	    return 1;
 	}
+	printf("set last??\n");
 	last = current;
 	current = current->next;
     }
@@ -63,13 +70,12 @@ int username_exists(char * username_ptr, struct node * head) {
 
 struct node * create_node(char * text, unsigned short int length, int socket_fd, struct node ** head_ptr_ptr) {
     struct node * new_node;
-
+    
     new_node = (struct node *)malloc(sizeof(struct node));
     new_node->username_ptr = text;
     new_node->length = length;
     new_node->next = NULL;
-
-    if (!*head_ptr_ptr) {
+    if (!(*head_ptr_ptr)) {
 	*head_ptr_ptr = new_node;
     }
     else {

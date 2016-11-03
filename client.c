@@ -15,7 +15,7 @@ void read_users_into_linked_list(int socket_fd, unsigned short int user_count, s
 	char * username_buffer;
 	unsigned short int length;
 	length = get_string_from_fd(socket_fd, &username_buffer);
-	create_node(username_buffer, length, NULL, &user_linked_list_ptr);
+	create_node(username_buffer, length, 0, user_linked_list_ptr);
     }
     return;
 }
@@ -27,14 +27,30 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
+    char test[10] = "abcd";
+    char test2[10] = "Poop";
+    char test3[10] = "TheDude";
+    char test4[10] =  "HotBabe69";
+    
     char * hostname;
     char * port_no;
     char * username;
     int username_length;
-    struct node * user_linked_list_ptr;
     hostname = argv[1];
     port_no = argv[2];
     username = argv[3];
+
+    create_node(test, 10, 0, &user_linked_list_ptr);
+    create_node(test2, 10, 0, &user_linked_list_ptr);
+    create_node(test3, 10, 0, &user_linked_list_ptr);
+    create_node(test4, 10, 0, &user_linked_list_ptr);
+    printf("or here??\n");
+    remove_node(test, &user_linked_list_ptr);
+    printf("current head: %s\n" , user_linked_list_ptr->username_ptr);
+    int test12;
+    char ** usernames;
+    test12 = count_nodes_and_return_usernames(&usernames, user_linked_list_ptr);
+    printf("user count: %d\n", test12);
 
     username_length = htons(strlen(username));
     
@@ -143,7 +159,7 @@ int main(int argc, char * argv[])
 
 			else if (type == USR_CONNECT) {
 			    printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
-			    create_node(text_buffer, length, NULL, &user_linked_list_ptr);
+			    create_node(text_buffer, length, 0, &user_linked_list_ptr);
 			}
 
 			else if (type == USR_DISCONNECT) {
