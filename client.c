@@ -147,70 +147,76 @@ int main(int argc, char * argv[])
 
 	while(1) {
 	    read_fds = master_read_fds;
-	    if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+	    int select_status;
+
+	    select_status = select(fdmax+1, &read_fds, NULL, NULL, NULL          );
+
+	    if (select_status == -1) {
 		perror("Error on slect\n");
 		exit(1);
 	    }
 
-	    for (int i =0; i <= fdmax; i++) {
-		if (FD_ISSET(i, &read_fds)) {
-		    // info from server;
-		    int type;
-		    unsigned short int length;
-		    char * text_buffer;
+	    else {
+		for (int i =0; i <= fdmax; i++) {
+		    if (FD_ISSET(i, &read_fds)) {
+			// info from server;
+			int type;
+			unsigned short int length;
+			char * text_buffer;
 
-		    if (i == sockfd) {
+			if (i == sockfd) {
 
-			if (recv(sockfd, &type, sizeof(int), 0) == -1) {
-			    perror("Error reading from socket.\n");
-			    exit(1);
-			}
+			    if (recv(sockfd, &type, sizeof(int), 0) == -1) {
+				perror("Error reading from socket.\n");
+				exit(1);
+			    }
 
-			if ((length = get_string_from_fd(sockfd, &text_buffer)) == -1) {
-			    perror("Error reading from socket.\n");
-			    exit(1);
-			}
+			    if ((length = get_string_from_fd(sockfd, &text_buffer)) == -1) {
+				perror("Error reading from socket.\n");
+				exit(1);
+			    }
 
-			if (type == USR_MESSAGE) {
-			    //printf("%s\n", text_buffer);
-			}
+			    if (type == USR_MESSAGE) {
+				//printf("%s\n", text_buffer);
+			    }
 
-			else if (type == USR_CONNECT) {
-			    //printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
-			    create_node(text_buffer, length, 0, &user_linked_list_ptr);
-			}
+			    else if (type == USR_CONNECT) {
+				//printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
+				create_node(text_buffer, length, 0, &user_linked_list_ptr);
+			    }
 
-			else if (type == USR_DISCONNECT) {
-			    //printf("< User \"%s\" has left the chat.\n", text_buffer);
-			    remove_node(text_buffer, &user_linked_list_ptr);
-			}
-		    }
-
-		    // pipe info from stdin, process commands
-		    else if (i == fd_pipe[0]) {
-			int read_status;
-			read_status = read(fd_pipe[0], &type, sizeof(int));
-			if (read_status == -1 || read_status == 0) {
-			    close(fd_pipe[0]);
-			    perror("Error reading from parent pipe.\n");
-			    exit(1);
-			}
-
-			// could allow for multiple commands, currently
-			// only the one
-
-			if (type == LIST_USERS) {
-			    int node_count;
-			    char ** usernames;
-			    node_count = count_nodes_and_return_usernames(&usernames, user_linked_list_ptr);
-			    printf("Users currently in chat:\n");
-			    for (int i = 0; i < node_count; i++) {
-			    		printf("%s\n", usernames[i]);
+			    else if (type == USR_DISCONNECT) {
+				//printf("< User \"%s\" has left the chat.\n", text_buffer);
+				remove_node(text_buffer, &user_linked_list_ptr);
 			    }
 			}
-		    }
-		    else {
-			exit(1);
+
+			// pipe info from stdin, process commands
+			else if (i == fd_pipe[0]) {
+			    int read_status;
+			    read_status = read(fd_pipe[0], &type, sizeof(int));
+			    if (read_status == -1 || read_status == 0) {
+				close(fd_pipe[0]);
+				perror("Error reading from parent pipe.\n");
+				exit(1);
+			    }
+
+			    // could allow for multiple commands, currently
+			    // only the one
+
+			    if (type == LIST_USERS) {
+				int node_count;
+				char ** usernames;
+				node_count = count_nodes_and_return_usernames(&usernames, user_linked_list_ptr);
+				printf("Users currently in chat:\n");
+				for (int i = 0; i < node_count; i++) {
+				    printf("%s\n", usernames[i]);
+				}
+			    }
+			}
+			else {
+			    exit(1);
+			}
 		    }
 		}
 	    }
@@ -221,36 +227,66 @@ int main(int argc, char * argv[])
     else {
 
 	char * buffer;
-	int read, error;
+	int read, error, fdmax;
 	size_t message_length = 0;
 	unsigned short int network_order;
+	struct timeval thirty_seconds;
+        fd_set read_stdin, master;
+	FD_ZERO(&read_stdin);
+	FD_ZERO(&master);
+	FD_SET(fileno(stdin), &master); 
+	fdmax = fileno(stdin);
+
+	thirty_seconds.tv_sec = 30;
+	thirty_seconds.tv_usec = 0;
 
 	close(fd_pipe[0]); // close read end
 
 	while (1) {
 	    //printf("%s> ", username);
-	    read = getline(&buffer, &message_length, stdin);
-	    if (strcmp(buffer, "/list\n") == 0) {
-		int command;
-		command = LIST_USERS;
-		if (write(fd_pipe[1], &command, sizeof(int)) == -1) {
-		    perror("Socket write error.\n");
+	    int select_status;
+
+	    read_stdin = master;
+	    select_status = select(fdmax+1, &read_stdin, NULL, NULL, &thirty_seconds);
+	    
+	    if (select_status == -1) {
+		perror("Waiting on STDIN error.\n");
+		exit(1);
+	    }
+	    
+	    else if (select_status == 0) {
+		printf("Sending dummy message.\n");
+		if (send(sockfd, &network_order, sizeof(network_order), 0) == -1) {
+		    perror("Error sending dummy message.\n");
 		    exit(1);
 		}
 	    }
+
 	    else {
-		network_order = htons(read-1);
-		error = send(sockfd, &network_order, sizeof(network_order), 0);
-		if (error == -1) {
-		    close(sockfd);
-		    perror("Client socket write error.\n");
-		    exit(1);
+		read = getline(&buffer, &message_length, stdin);
+		if (strcmp(buffer, "/list\n") == 0) {
+		    int command;
+		    command = LIST_USERS;
+		    if (write(fd_pipe[1], &command, sizeof(int)) == -1) {
+			perror("Socket write error.\n");
+			exit(1);
+		    }
 		}
-		error = write(sockfd, buffer, sizeof(char) * message_length);
-		if (error == -1) {
-		    close(sockfd);
-		    perror("Client socket write error.\n");
-		    exit(1);
+
+		else {
+		    network_order = htons(read-1);
+		    error = send(sockfd, &network_order, sizeof(network_order), 0);
+		    if (error == -1) {
+			close(sockfd);
+			perror("Client socket write error.\n");
+			exit(1);
+		    }
+		    error = write(sockfd, buffer, sizeof(char) * message_length);
+		    if (error == -1) {
+			close(sockfd);
+			perror("Client socket write error.\n");
+			exit(1);
+		    }
 		}
 	    }
 
