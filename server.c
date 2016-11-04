@@ -51,8 +51,10 @@ int main(int argc, char * argv[])
     
     FD_ZERO(&master_read_fds);
     FD_ZERO(&master_write_fds);
+    FD_ZERO(&master_worker_pipes);
     FD_ZERO(&read_fds);
     FD_ZERO(&write_fds);
+    FD_ZERO(&worker_pipes);
 
     current_pid = getpid();
     printf("Process ID: %d\n", (int)(current_pid));
@@ -163,6 +165,7 @@ int main(int argc, char * argv[])
 
 			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
 			    perror("Error sending handshake to client.\n");
+			    close(clientfd);
 			    exit(-1);
 			}
 
@@ -170,6 +173,7 @@ int main(int argc, char * argv[])
 			
 			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
 			    perror("Error sending # of users to client.\n");
+			    close(clientfd);
 			    exit(-1);
 			}
 			
@@ -226,9 +230,29 @@ int main(int argc, char * argv[])
 		    for(int j = 0; j <= fdmax; j++) {
 		    	if (FD_ISSET(j, &write_fds)) {
 			    printf("writing length:'%hu' and string:'%s' to j: %d\n", host_length, buff, j);
-			    write(j, &event, sizeof(int));
-			    write(j, &host_length, sizeof(host_length));
-		    	    write(j, buff, host_length);
+			    int success;
+			    success = write(j, &event, sizeof(int));
+
+			    if (success == -1) {
+				close(j);
+				FD_CLR(j, &master_write_fds);
+				exit(1);
+			    }
+
+			    success = write(j, &host_length, sizeof(host_length));
+
+			    if (success == -1) {
+				close(j);
+				FD_CLR(j, &master_write_fds);
+				exit(1);
+			    }
+		    	    success = write(j, buff, host_length);
+
+			    if (success == -1) {
+				close(j);
+				FD_CLR(j, &master_write_fds);
+				exit(1);
+			    }
 		    	}
 		    }
 
@@ -290,7 +314,7 @@ int main(int argc, char * argv[])
 
 			if (success == -1 || success == 0) {
 			    perror("Error reading from pipe.\n");
-			    exit(1);
+			    close(worker_pipe[1]);
 			}
 
 			// get corresponding string (username, message, etc.);
@@ -311,15 +335,17 @@ int main(int argc, char * argv[])
 				write(i, &disconnect, sizeof(int));
 			    }
 			    // need to tell parent to create the node;
-			    write(worker_pipe[0], &event, sizeof(int));
-			    write(worker_pipe[0], read_buff, sizeof(char) * read_length);
+			    write(worker_pipe[1], &event, sizeof(int));
+			    write(worker_pipe[1], &read_length, sizeof(unsigned short int));
+			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
 			}
 
 			else if (event == USR_DISCONNECT) {
 			    printf("disconnect\n");
 			    // tell parent to remove the node
-			    write(worker_pipe[0], &event, sizeof(int));
-			    write(worker_pipe[0], read_buff, sizeof(char) * read_length);
+			    write(worker_pipe[1], &event, sizeof(int));
+			    write(worker_pipe[1], &read_length, sizeof(unsigned short int));
+			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
 			}
 
 			else if (event == USR_MESSAGE) {
@@ -341,5 +367,37 @@ int main(int argc, char * argv[])
 	    }
 	    
 	}
+
+	worker_pipes = master_worker_pipes;
+	struct timeval non_block;
+	non_block.tv_sec = 0;
+	non_block.tv_usec = 0;
+
+	if (select(fdmax+1, &worker_pipes, NULL, NULL, &non_block) == -1) {
+	    perror("Error reading from worker pipe.\n");
+	    exit(1);
+	}
+       
+	for (int y = 0; y <= fdmax; y++) {
+	    if (FD_ISSET(y, &worker_pipes)) {
+		unsigned short int read_length;
+		int event, success;
+		char * read_buff;
+		success = read(y, &event, sizeof(int));
+	        if (success <= 0) {
+		    close(y);
+		    FD_CLR(y, &master_worker_pipes);
+		}
+		
+	        read_length = get_string_from_fd(y, &read_buff);
+		if (read_length <= 0) {
+		    close(y);
+		    FD_CLR(y, &master_worker_pipes);
+		}
+
+		printf("read from worker pipe: %s\n", read_buff);
+		
+	    }
+	}	
     }
 }

@@ -90,8 +90,8 @@ unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
     int success;
 
     success = read(fd, &length, sizeof(length));
-    if (success == -1) {
-	return -1;
+    if (success <= 0) {
+	return success;
     }
 
     length = ntohs(length);
@@ -99,8 +99,8 @@ unsigned short int get_string_from_fd(int fd, char ** buffer_ptr) {
     *buffer_ptr = malloc(length * sizeof(char));
     
     success = read(fd, *buffer_ptr, length * sizeof(char));
-    if (success == -1) {
-	return -1;
+    if (success <= 0) {
+	return success;
     }
     return length;
 }
