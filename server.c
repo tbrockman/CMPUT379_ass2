@@ -123,12 +123,19 @@ int main(int argc, char * argv[])
 
 		    if (pid == -1) {
 			perror("Error forking.");
-			exit(-1);
+			exit(1);
 		    }
 
 		    else if (pid == 0) {
 			// we're in the child
 			
+			FD_ZERO(&master_read_fds); // erase read fds
+			FD_ZERO(&master_write_fds); // erase write fds
+			FD_ZERO(&master_worker_pipes);
+			FD_SET(fd_parent[1], &master_write_fds); // add parent write
+			FD_SET(fd_child[0], &master_read_fds); // add child read
+			FD_SET(clientfd, &master_read_fds); // add client to read
+			child_read = fd_child[0];
 			fdmax = clientfd;
 
 			if (fd_parent[1] > fdmax) {
@@ -149,37 +156,51 @@ int main(int argc, char * argv[])
 			    }
 			}
 
-			FD_ZERO(&master_read_fds); // erase read fds
-			FD_ZERO(&master_write_fds); // erase write fds
-			FD_SET(fd_parent[1], &master_write_fds); // add parent write
-			FD_SET(fd_child[0], &master_read_fds); // add child read
-			FD_SET(clientfd, &master_read_fds); // add client to read
-			child_read = fd_child[0];
+
 
 			// we now need to communicate with the client
-			int n;
+			unsigned char n[2];
 			unsigned short int length;
 			char ** users_ptr;
 			char * buffer;
-			n = htons((0xCF << 8) + 0xA7);
 
-			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
+			n[0] = 0xCF;
+			n[1] = 0xA7;
+
+			if (send(clientfd, n, sizeof(unsigned char), 0) == -1) {
 			    perror("Error sending handshake to client.\n");
 			    close(clientfd);
-			    exit(-1);
+			    exit(1);
 			}
 
-			n = htons(count_nodes_and_return_usernames(&users_ptr, user_linked_list_ptr));
+			length = htons(count_nodes_and_return_usernames(&users_ptr, user_linked_list_ptr));
 			
-			if (send(clientfd, (const void *)(&n), sizeof(n), 0) == -1) {
+			if (send(clientfd, n+1, sizeof(unsigned char), 0) == -1) {
 			    perror("Error sending # of users to client.\n");
 			    close(clientfd);
-			    exit(-1);
+			    exit(1);
 			}
 			
 
 			// send user list
-
+			for (int v = 0; v < ntohs(length); v++) {
+			    int string_length;
+			    unsigned short int network_length;
+			    string_length = strlen(users_ptr[v]);
+			    network_length = htons(string_length);
+			    if (send(clientfd, &network_length, sizeof(unsigned short int), 0) == -1) {
+				    perror("Error sending user to client.\n");
+				    close(clientfd);
+				    exit(1);
+			    }
+			    
+			    printf("Sending username: %s\n to client.\n", users_ptr[v]);
+			    if (send(clientfd, users_ptr[v], sizeof(char) * string_length, 0) == -1) {
+				perror("Error sending user to client.\n");
+				close(clientfd);
+				exit(1);
+			    }
+			}
 			needs_to_connect = 1;
 		    }
 		    
@@ -246,6 +267,7 @@ int main(int argc, char * argv[])
 				FD_CLR(j, &master_write_fds);
 				exit(1);
 			    }
+
 		    	    success = write(j, buff, host_length);
 
 			    if (success == -1) {
@@ -295,7 +317,7 @@ int main(int argc, char * argv[])
 		    // fork a process to read/write the data
 		    // to all pipes, creating a pipe in case we have
 		    // to modify our linked list
-		    
+
 		    pipe(worker_pipe);
 		    worker = fork();
 		    
@@ -319,8 +341,9 @@ int main(int argc, char * argv[])
 
 			// get corresponding string (username, message, etc.);
 			read_length = get_string_from_fd(i, &read_buff);
+			printf("heard string: %s\n", read_buff);
 
-			if (read_length == -1 || read_length == 0) {
+			if (read_length == -1) {
 			    perror("Error reading from pipe.\n");
 			    exit(1);
 			}
@@ -350,7 +373,14 @@ int main(int argc, char * argv[])
 
 			else if (event == USR_MESSAGE) {
 			    // tell all children
-			    printf("Got message\n");
+			    for (int k = 0; k <= fdmax; k++) {
+				// don't care if it's ready or not
+				// we'll block until it is
+				if (FD_ISSET(k, &master_write_fds)) {
+				    write(k, &read_length, sizeof(int));
+				    write(k, read_buff, sizeof(char) * read_length);
+				}
+			    }
 			}
 
 			exit(1);
@@ -365,7 +395,6 @@ int main(int argc, char * argv[])
 		    }
 		}
 	    }
-	    
 	}
 
 	worker_pipes = master_worker_pipes;
@@ -380,16 +409,20 @@ int main(int argc, char * argv[])
        
 	for (int y = 0; y <= fdmax; y++) {
 	    if (FD_ISSET(y, &worker_pipes)) {
+
 		unsigned short int read_length;
 		int event, success;
 		char * read_buff;
+
 		success = read(y, &event, sizeof(int));
+
 	        if (success <= 0) {
 		    close(y);
 		    FD_CLR(y, &master_worker_pipes);
 		}
 		
 	        read_length = get_string_from_fd(y, &read_buff);
+
 		if (read_length <= 0) {
 		    close(y);
 		    FD_CLR(y, &master_worker_pipes);

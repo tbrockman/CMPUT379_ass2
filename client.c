@@ -123,17 +123,17 @@ int main(int argc, char * argv[])
 	// Username list (malloc num_connected * sizeof(char*))
 
 	read_users_into_linked_list(sockfd, num_connected, &user_linked_list_ptr);
+	printf("Sending: %hu\n", ntohs(username_length));
 	if (send(sockfd, &username_length, sizeof(unsigned short int), 0) == -1) {
 	    perror("Error sending username.\n");
 	    exit(1);
 	}
 
+	printf("Sending: %s\n", username);
 	if (send(sockfd, username, username_length * sizeof(char), 0) == -1) {
 	    perror("Error sending username.\n");
 	    exit(1);
 	}
-	
-	printf("Sent username length: %hu", ntohs(username_length));
 
 	FD_SET(sockfd, &master_read_fds);
 	FD_SET(fd_pipe[0], &master_read_fds);
@@ -258,7 +258,6 @@ int main(int argc, char * argv[])
 		printf("Sending dummy message.\n");
 		network_order = 0;
 		if (send(sockfd, &network_order, sizeof(unsigned short int), 0) == -1) {
-		    printf("No error not exiting what the ck??\n");
 		    perror("Error sending dummy message.\n");
 		    exit(1);
 		}
