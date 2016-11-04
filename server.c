@@ -227,7 +227,7 @@ int main(int argc, char * argv[])
 		// we are a child and we have data from a socket
 		else if (i == clientfd) {
 		    unsigned short int host_length;
-		    char event;
+		    int event;
 		    char * buff;
 		    pid_t pid_here;
 		    
@@ -257,7 +257,7 @@ int main(int argc, char * argv[])
 			    if (FD_ISSET(j, &write_fds)) {
 				printf("writing length:'%hu' and string:'%s' to j: %d\n", host_length, buff, j);
 				int success;
-				success = write(j, &event, sizeof(unsigned short int));
+				success = write(j, &event, sizeof(int));
 
 				if (success == -1) {
 				    close(j);
@@ -326,7 +326,7 @@ int main(int argc, char * argv[])
 		    int event, success;
 		    char * read_buff;
 
-		    success = read(i, &event, sizeof(unsigned short int)); // read event
+		    success = read(i, &event, sizeof(int)); // read event
 		    printf("event: %d\n", event);
 
 		    if (success == -1) {
@@ -339,7 +339,9 @@ int main(int argc, char * argv[])
 
 		    if (read_length == -1 || read_length == 0) {
 			perror("Error reading from pipe.\n");
-			exit(1);
+			close(i);
+			FD_CLR(i, &master_read_fds);
+			continue;
 		    }
 
 		    pid_t worker;
