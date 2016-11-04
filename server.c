@@ -119,6 +119,7 @@ int main(int argc, char * argv[])
 		    int fd_child[2];
 		    pipe(fd_parent);
 		    pipe(fd_child);
+		    printf("Socket worker fork.\n");
 		    pid_t pid = fork();
 
 		    if (pid == -1) {
@@ -256,6 +257,7 @@ int main(int argc, char * argv[])
 
 			    if (success == -1) {
 				close(j);
+				perror("Error writing to parents pipe.\n");
 				FD_CLR(j, &master_write_fds);
 				exit(1);
 			    }
@@ -264,6 +266,7 @@ int main(int argc, char * argv[])
 
 			    if (success == -1) {
 				close(j);
+				perror("Error writing to parents pipe.\n");
 				FD_CLR(j, &master_write_fds);
 				exit(1);
 			    }
@@ -275,6 +278,7 @@ int main(int argc, char * argv[])
 				FD_CLR(j, &master_write_fds);
 				exit(1);
 			    }
+			    printf("wrote to parents pipe\n");
 		    	}
 		    }
 
@@ -302,6 +306,7 @@ int main(int argc, char * argv[])
 		    else if (event == USR_MESSAGE) {
 			// send to client fd user message
 		    }
+		    exit(1);
 		}
 
 		// otherwise we have read data from a pipe
@@ -312,6 +317,7 @@ int main(int argc, char * argv[])
 		else {
 
 		    pid_t worker;
+		    pid_t mine;
 		    int worker_pipe[2];
 
 		    // fork a process to read/write the data
@@ -319,6 +325,9 @@ int main(int argc, char * argv[])
 		    // to modify our linked list
 
 		    pipe(worker_pipe);
+		    printf("Worker forked on %d.\n", i);
+		    mine = getpid();
+		    printf("PID: %d\n", mine);
 		    worker = fork();
 		    
 		    if (worker == -1) {
@@ -332,9 +341,11 @@ int main(int argc, char * argv[])
 			char * read_buff;
 
 			close(worker_pipe[0]); // close read side of pipe
-			success = read(i, &event, sizeof(int)); // read event
+			printf("before blocking event\n");
+			success = read(i, &event, sizeof(unsigned short int)); // read event
+			printf("event: %d\n", event);
 
-			if (success == -1 || success == 0) {
+			if (success == -1) {
 			    perror("Error reading from pipe.\n");
 			    close(worker_pipe[1]);
 			}
@@ -343,7 +354,7 @@ int main(int argc, char * argv[])
 			read_length = get_string_from_fd(i, &read_buff);
 			printf("heard string: %s\n", read_buff);
 
-			if (read_length == -1) {
+			if (read_length == -1 || read_length == 0) {
 			    perror("Error reading from pipe.\n");
 			    exit(1);
 			}
@@ -377,17 +388,28 @@ int main(int argc, char * argv[])
 				// don't care if it's ready or not
 				// we'll block until it is
 				if (FD_ISSET(k, &master_write_fds)) {
-				    write(k, &read_length, sizeof(int));
-				    write(k, read_buff, sizeof(char) * read_length);
+				    if (write(k, &read_length, sizeof(int)) <= 0) {
+					perror("Error writing to child.");
+					close(k);
+					FD_CLR(k, &master_write_fds);
+					}
+				    if (write(k, read_buff, sizeof(char) * read_length) <= 0) {
+					close(k);
+					FD_CLR(k, &master_write_fds);
+				     }
+				    
 				}
 			    }
 			}
 
 			exit(1);
 		    }
+
 		    // we're not the worker
 		    else {
+			printf("were not??\n");
 			close(worker_pipe[1]); // close write end of pipe;
+			FD_CLR(i, &master_read_fds);
 			FD_SET(worker_pipe[0], &master_worker_pipes);
 			if (worker_pipe[0] > fdmax) {
 			    fdmax = worker_pipe[0];

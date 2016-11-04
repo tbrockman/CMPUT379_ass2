@@ -230,23 +230,22 @@ int main(int argc, char * argv[])
 	int read, error, fdmax;
 	size_t message_length = 0;
 	unsigned short int network_order;
-	struct timeval thirty_seconds;
         fd_set read_stdin, master;
+
 	FD_ZERO(&read_stdin);
 	FD_ZERO(&master);
 	FD_SET(fileno(stdin), &master); 
 	fdmax = fileno(stdin);
-
-	thirty_seconds.tv_sec = 30;
-	thirty_seconds.tv_usec = 0;
 
 	close(fd_pipe[0]); // close read end
 
 	while (1) {
 	    //printf("%s> ", username);
 	    int select_status;
-
+	    struct timeval thirty_seconds;
 	    read_stdin = master;
+	    thirty_seconds.tv_sec = 30;
+	    thirty_seconds.tv_usec = 0;
 	    select_status = select(fdmax+1, &read_stdin, NULL, NULL, &thirty_seconds);
 	    
 	    if (select_status == -1) {
