@@ -302,8 +302,13 @@ int main(int argc, char * argv[])
 		// we're in the child and have data from the parent
 		else if (i == child_read) {
 		    int event;
+		    unsigned short int buff_length;
+		    char * child_buffer;
 		    printf("In child reading from parent.\n");
 		    read(i, &event, sizeof(int));
+		    buff_length = get_string_from_fd(i, &child_buffer);
+		    printf("buff length and string: %d, %s\n", buff_length, child_buffer);
+
 		    if (event == CHILD_SUICIDE) {
 			exit(1);
 		    }
@@ -317,9 +322,9 @@ int main(int argc, char * argv[])
 		    }
 
 		    else if (event == USR_MESSAGE) {
+			
 			// send to client fd user message
 		    }
-		    exit(1);
 		}
 
 		// otherwise we have read data from a pipe
@@ -341,7 +346,7 @@ int main(int argc, char * argv[])
 
 		    // get corresponding string (username, message, etc.);
 		    read_length = get_string_from_fd(i, &read_buff);
-		    printf("heard string: %s\n", read_buff);
+		    printf("heard string: %s with length%d\n", read_buff, read_length);
 
 		    if (read_length == -1 || read_length == 0) {
 			perror("Error reading from pipe.\n");
@@ -369,6 +374,8 @@ int main(int argc, char * argv[])
 		    else if (worker == 0) {
 
 			close(worker_pipe[0]); // close read side of pipe
+			unsigned short int convert_to_network;
+			convert_to_network = ntohs(read_length);
 
 			if (event == USR_CONNECT) {
 			    
@@ -382,8 +389,6 @@ int main(int argc, char * argv[])
 			    
 			    // need to tell parent to create the node;
 			    printf(" event creating node: %d with length %d\n", event, read_length);
-			    unsigned short int convert_to_network;
-			    convert_to_network = ntohs(read_length);
 			    write(worker_pipe[1], &event, sizeof(int));
 			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
 			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
@@ -394,7 +399,7 @@ int main(int argc, char * argv[])
 			    printf("disconnect\n");
 			    // tell parent to remove the node
 			    write(worker_pipe[1], &event, sizeof(int));
-			    write(worker_pipe[1], &read_length, sizeof(unsigned short int));
+			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
 			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
 			}
 
@@ -406,10 +411,17 @@ int main(int argc, char * argv[])
 
 				// look at the read lengths you're sending
 				if (FD_ISSET(k, &master_write_fds)) {
-				    if (write(k, &read_length, sizeof(int)) <= 0) {
+				    if (write(k, &event, sizeof(int)) <= 0) {
+					perror("Error writing to child.\n");
+					close(k);
+					FD_CLR(k, &master_write_fds);
+					continue;
+				    }
+				    if (write(k, &convert_to_network, sizeof(unsigned short int)) <= 0) {
 					perror("Error writing to child.");
 					close(k);
 					FD_CLR(k, &master_write_fds);
+					continue;
 					}
 				    if (write(k, read_buff, sizeof(char) * read_length) <= 0) {
 					close(k);
@@ -454,15 +466,15 @@ int main(int argc, char * argv[])
 		unsigned short int read_length;
 		int event, success;
 		char * read_buff;
-		printf("lookin at: %d\n", y);
 		success = read(y, &event, sizeof(int));
-
-		printf("event from worker: %d\n", event);
+		
 	        if (success <= 0) {
 		    close(y);
 		    FD_CLR(y, &master_worker_pipes);
+		    continue;
 		}
 		
+		printf("event from worker: %d\n", event);
 	        read_length = get_string_from_fd(y, &read_buff);
 
 		printf("returned read length: %d\n", read_length);
