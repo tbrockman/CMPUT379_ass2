@@ -15,7 +15,7 @@ struct node {
 
 int count_nodes_and_return_usernames(char *** array_ptr_ptr, struct node * head);
 int remove_node(char * username_ptr, struct node ** head_ptr_ptr);
-int username_exists(char * username_ptr, struct node * head);
+struct node * get_user(char * username_ptr, struct node * head);
 struct node * create_node(char * text, unsigned short int length, int socket_fd, struct node ** head_ptr_ptr);
 unsigned short int get_string_from_fd(int fd, char ** buffer_ptr);
 

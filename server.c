@@ -37,6 +37,8 @@ int main(int argc, char * argv[])
     socklen_t addrlen;
     fd_set master_read_fds; // because select modifies read_fds
     fd_set master_write_fds;
+    fd_set master_worker_pipes;
+    fd_set worker_pipes;
     fd_set read_fds;
     fd_set write_fds;
 
@@ -68,8 +70,11 @@ int main(int argc, char * argv[])
     sa.sin_port = htons (GLOBAL_PORT);
 
     
-    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0)
+    if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0) {
 	perror("setsockopt(SO_REUSEADDR) failed");
+	exit(1);
+    }
+	
 
 
     if (bind (sock, (struct sockaddr*) &sa, sizeof (sa))) {
@@ -234,6 +239,7 @@ int main(int argc, char * argv[])
 		// we're in the child and have data from the parent
 		else if (i == child_read) {
 		    int event;
+		    printf("In child reading from parent.\n");
 		    read(i, &event, sizeof(int));
 		    if (event == CHILD_SUICIDE) {
 			exit(1);
@@ -252,7 +258,7 @@ int main(int argc, char * argv[])
 		    }
 		}
 
-		// other we have read data from a pipe
+		// otherwise we have read data from a pipe
 		// types:
 		// user disconnect -> remove user from list, tell users
 		// user connect -> add user to linked list, tell users
@@ -260,10 +266,13 @@ int main(int argc, char * argv[])
 		else {
 
 		    pid_t worker;
+		    int worker_pipe[2];
 
-		    // fork a process to read and then write the data
-		    // to all pipes
+		    // fork a process to read/write the data
+		    // to all pipes, creating a pipe in case we have
+		    // to modify our linked list
 		    
+		    pipe(worker_pipe);
 		    worker = fork();
 		    
 		    if (worker == -1) {
@@ -273,43 +282,61 @@ int main(int argc, char * argv[])
 
 		    else if (worker == 0) {
 			unsigned short int read_length;
-			int event;
+			int event, success;
 			char * read_buff;
 
-			read(i, &event, sizeof(int));
+			close(worker_pipe[0]); // close read side of pipe
+			success = read(i, &event, sizeof(int)); // read event
+
+			if (success == -1 || success == 0) {
+			    perror("Error reading from pipe.\n");
+			    exit(1);
+			}
+
+			// get corresponding string (username, message, etc.);
+			read_length = get_string_from_fd(i, &read_buff);
+
+			if (read_length == -1 || read_length == 0) {
+			    perror("Error reading from pipe.\n");
+			    exit(1);
+			}
 		    
 			if (event == USR_CONNECT) {
-			    read_length = get_string_from_fd(i, &read_buff);
+			    
 			    printf("Username '%s' connected.\n", read_buff);
-			    int exists;
-			    exists = username_exists(read_buff, user_linked_list_ptr);
+			    struct node * exists;
+			    exists = get_user(read_buff, user_linked_list_ptr);
 			    if (exists) {
 				int disconnect = CHILD_SUICIDE;
 				write(i, &disconnect, sizeof(int));
 			    }
 			    // need to tell parent to create the node;
+			    write(worker_pipe[0], &event, sizeof(int));
+			    write(worker_pipe[0], read_buff, sizeof(char) * read_length);
 			}
 
 			else if (event == USR_DISCONNECT) {
 			    printf("disconnect\n");
-			    // remove user from linked list somehow
+			    // tell parent to remove the node
+			    write(worker_pipe[0], &event, sizeof(int));
+			    write(worker_pipe[0], read_buff, sizeof(char) * read_length);
 			}
 
 			else if (event == USR_MESSAGE) {
-			    printf("message\n");
+			    // tell all children
+			    printf("Got message\n");
 			}
 
 			exit(1);
 		    }
-
-		    //read(i, &read_length, sizeof(read_length));
-		    //read_buff = malloc(read_length * sizeof(char));
-		    //read(i, read_buff, sizeof(char) * read_length);
-		    //printf("heard from pipe: %s\n", read_buff);
-		    exit(1);
-			//}
-
-
+		    // we're not the worker
+		    else {
+			close(worker_pipe[1]); // close write end of pipe;
+			FD_SET(worker_pipe[0], &master_worker_pipes);
+			if (worker_pipe[0] > fdmax) {
+			    fdmax = worker_pipe[0];
+			}
+		    }
 		}
 	    }
 	    

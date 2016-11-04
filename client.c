@@ -256,7 +256,9 @@ int main(int argc, char * argv[])
 	    
 	    else if (select_status == 0) {
 		printf("Sending dummy message.\n");
-		if (send(sockfd, &network_order, sizeof(network_order), 0) == -1) {
+		network_order = 0;
+		if (send(sockfd, &network_order, sizeof(unsigned short int), 0) == -1) {
+		    printf("No error not exiting what the ck??\n");
 		    perror("Error sending dummy message.\n");
 		    exit(1);
 		}

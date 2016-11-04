@@ -49,13 +49,13 @@ int remove_node(char * username_ptr, struct node ** head_ptr_ptr) {
     return 0;
 }
 
-int username_exists(char * username_ptr, struct node * head) {
+struct node * get_user(char * username_ptr, struct node * head) {
     struct node * current;
     current = head;
 
     while (current) {
 	if (strcmp(current->username_ptr, username_ptr) == 0) {
-	    return 1;
+	    return current;
 	}
 	current = current->next;
     }
