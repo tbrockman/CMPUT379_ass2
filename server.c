@@ -165,10 +165,10 @@ int main(int argc, char * argv[])
 			char ** users_ptr;
 			char * buffer;
 
-			n[0] = 0xCF;
-			n[1] = 0xA7;
+			n[0] = 0xcf;
+			n[1] = 0xa7;
 
-			if (send(clientfd, n, sizeof(unsigned char), 0) == -1) {
+			if (send(clientfd, n, sizeof(unsigned char) * 2, 0) == -1) {
 			    perror("Error sending handshake to client.\n");
 			    close(clientfd);
 			    exit(1);
@@ -176,7 +176,8 @@ int main(int argc, char * argv[])
 
 			length = htons(count_nodes_and_return_usernames(&users_ptr, user_linked_list_ptr));
 			
-			if (send(clientfd, n+1, sizeof(unsigned char), 0) == -1) {
+			if (send(clientfd, &length, sizeof(unsigned short int), 0) == -1) {
+			    
 			    perror("Error sending # of users to client.\n");
 			    close(clientfd);
 			    exit(1);
@@ -256,7 +257,7 @@ int main(int argc, char * argv[])
 			    if (FD_ISSET(j, &write_fds)) {
 				printf("writing length:'%hu' and string:'%s' to j: %d\n", host_length, buff, j);
 				int success;
-				success = write(j, &event, sizeof(int));
+				success = write(j, &event, sizeof(unsigned short int));
 
 				if (success == -1) {
 				    close(j);
@@ -265,7 +266,7 @@ int main(int argc, char * argv[])
 				    exit(1);
 				}
 
-				success = write(j, &host_length, sizeof(host_length));
+				success = write(j, &host_length, sizeof(unsigned short int));
 
 				if (success == -1) {
 				    close(j);
@@ -274,7 +275,7 @@ int main(int argc, char * argv[])
 				    exit(1);
 				}
 
-				success = write(j, buff, host_length);
+				success = write(j, buff, sizeof(char) * host_length);
 
 				if (success == -1) {
 				    close(j);

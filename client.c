@@ -108,8 +108,6 @@ int main(int argc, char * argv[])
 
 	fdmax = sockfd;
 
-	// Numbers of users
-
 	unsigned short int num_connected;
 	if (recv(sockfd, &num_connected, sizeof(num_connected), 0) == -1) {
 	    perror("Error retrieving number of users.\n");
@@ -120,17 +118,13 @@ int main(int argc, char * argv[])
 
 	printf("Number of users: %hu\n", num_connected);
 
-	// Username list (malloc num_connected * sizeof(char*))
-
 	read_users_into_linked_list(sockfd, num_connected, &user_linked_list_ptr);
-	printf("Sending: %hu\n", ntohs(username_length));
 	if (send(sockfd, &username_length, sizeof(unsigned short int), 0) == -1) {
 	    perror("Error sending username.\n");
 	    exit(1);
 	}
 
-	printf("Sending: %s\n", username);
-	if (send(sockfd, username, username_length * sizeof(char), 0) == -1) {
+	if (send(sockfd, username, ntohs(username_length) * sizeof(char), 0) == -1) {
 	    perror("Error sending username.\n");
 	    exit(1);
 	}
@@ -226,7 +220,7 @@ int main(int argc, char * argv[])
     // parent reads from stdin and writes to socket
     else {
 
-	char * buffer;
+	char * buffer = NULL;
 	int read, error, fdmax;
 	size_t message_length = 0;
 	unsigned short int network_order;
@@ -274,6 +268,7 @@ int main(int argc, char * argv[])
 		}
 
 		else {
+
 		    network_order = htons(read-1);
 		    error = send(sockfd, &network_order, sizeof(network_order), 0);
 		    if (error == -1) {
@@ -281,7 +276,8 @@ int main(int argc, char * argv[])
 			perror("Client socket write error.\n");
 			exit(1);
 		    }
-		    error = write(sockfd, buffer, sizeof(char) * message_length);
+
+		    error = write(sockfd, buffer, sizeof(char) * (read-1));
 		    if (error == -1) {
 			close(sockfd);
 			perror("Client socket write error.\n");
