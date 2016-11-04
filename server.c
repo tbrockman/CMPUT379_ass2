@@ -97,9 +97,14 @@ int main(int argc, char * argv[])
     while(1) {
 	read_fds = master_read_fds;
 	write_fds = master_write_fds;
+	worker_pipes = master_worker_pipes;
+
+	struct timeval no_block;
+	no_block.tv_sec = 0;
+	no_block.tv_usec = 0;
 
 	// note for later: select returns 0 on timeout
-	if (select(fdmax+1, &read_fds, NULL, NULL, NULL) == -1) {
+	if (select(fdmax+1, &read_fds, NULL, NULL, &no_block) == -1) {
 	    perror("Error on select\n");
 	    exit(1);
 	}
@@ -132,7 +137,7 @@ int main(int argc, char * argv[])
 			
 			FD_ZERO(&master_read_fds); // erase read fds
 			FD_ZERO(&master_write_fds); // erase write fds
-			FD_ZERO(&master_worker_pipes);
+			FD_ZERO(&master_worker_pipes); // erase worker pipes
 			FD_SET(fd_parent[1], &master_write_fds); // add parent write
 			FD_SET(fd_child[0], &master_read_fds); // add child read
 			FD_SET(clientfd, &master_read_fds); // add client to read
@@ -234,7 +239,6 @@ int main(int argc, char * argv[])
 		    pid_here = getpid();
 		    printf("here: pid %d\n", pid_here);
 		    host_length = get_string_from_fd(clientfd, &buff);
-		    
 
 		    if (host_length != 0) {
 			if (needs_to_connect) {
@@ -266,7 +270,9 @@ int main(int argc, char * argv[])
 				    exit(1);
 				}
 
-				success = write(j, &host_length, sizeof(unsigned short int));
+				unsigned short int convert_host;
+				convert_host = ntohs(host_length);
+				success = write(j, &convert_host, sizeof(unsigned short int));
 
 				if (success == -1) {
 				    close(j);
@@ -375,9 +381,13 @@ int main(int argc, char * argv[])
 			    }
 			    
 			    // need to tell parent to create the node;
+			    printf(" event creating node: %d with length %d\n", event, read_length);
+			    unsigned short int convert_to_network;
+			    convert_to_network = ntohs(read_length);
 			    write(worker_pipe[1], &event, sizeof(int));
-			    write(worker_pipe[1], &read_length, sizeof(unsigned short int));
+			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
 			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
+			    printf("parent 4\n");
 			}
 
 			else if (event == USR_DISCONNECT) {
@@ -393,6 +403,8 @@ int main(int argc, char * argv[])
 			    for (int k = 0; k <= fdmax; k++) {
 				// don't care if it's ready or not
 				// we'll block until it is
+
+				// look at the read lengths you're sending
 				if (FD_ISSET(k, &master_write_fds)) {
 				    if (write(k, &read_length, sizeof(int)) <= 0) {
 					perror("Error writing to child.");
@@ -408,12 +420,16 @@ int main(int argc, char * argv[])
 			    }
 			}
 
-			exit(1);
+			else {
+			    printf("Unknown event.\n");
+			}
+			
+			printf("left\n");
+			exit(1); // close after doing work
 		    }
 
 		    // we're not the worker
 		    else {
-			printf("were not??\n");
 			close(worker_pipe[1]); // close write end of pipe;
 			FD_SET(worker_pipe[0], &master_worker_pipes);
 			if (worker_pipe[0] > fdmax) {
@@ -424,7 +440,6 @@ int main(int argc, char * argv[])
 	    }
 	}
 
-	worker_pipes = master_worker_pipes;
 	struct timeval non_block;
 	non_block.tv_sec = 0;
 	non_block.tv_usec = 0;
@@ -434,15 +449,15 @@ int main(int argc, char * argv[])
 	    exit(1);
 	}
        
-	for (int y = 0; y <= fdmax; y++) {
+	for (int y = 0; y <= fdmax+1; y++) {
 	    if (FD_ISSET(y, &worker_pipes)) {
-
 		unsigned short int read_length;
 		int event, success;
 		char * read_buff;
-
+		printf("lookin at: %d\n", y);
 		success = read(y, &event, sizeof(int));
 
+		printf("event from worker: %d\n", event);
 	        if (success <= 0) {
 		    close(y);
 		    FD_CLR(y, &master_worker_pipes);
@@ -450,13 +465,11 @@ int main(int argc, char * argv[])
 		
 	        read_length = get_string_from_fd(y, &read_buff);
 
+		printf("returned read length: %d\n", read_length);
 		if (read_length <= 0) {
 		    close(y);
 		    FD_CLR(y, &master_worker_pipes);
 		}
-
-		printf("read from worker pipe: %s\n", read_buff);
-		
 	    }
 	}	
     }
