@@ -233,54 +233,60 @@ int main(int argc, char * argv[])
 		    pid_here = getpid();
 		    printf("here: pid %d\n", pid_here);
 		    host_length = get_string_from_fd(clientfd, &buff);
+		    
 
-		    if (needs_to_connect) {
-			event = 1;
-			needs_to_connect = 0;
-		    }
+		    if (host_length != 0) {
+			if (needs_to_connect) {
+			    event = 1;
+			    needs_to_connect = 0;
+			}
 
-		    else {
-			event = 0;
-		    }
+			else {
+			    event = 0;
+			}
 
-		    if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
-			perror("Error on write select\n");
-			exit(-1);
-		    }
+			printf("waiting to write to parents pipe\n");
+			if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
+			    perror("Error on write select\n");
+			    exit(-1);
+			}
 
-		    // write to parents pipe
-		    for(int j = 0; j <= fdmax; j++) {
-		    	if (FD_ISSET(j, &write_fds)) {
-			    printf("writing length:'%hu' and string:'%s' to j: %d\n", host_length, buff, j);
-			    int success;
-			    success = write(j, &event, sizeof(int));
+			// write to parents pipe
+			for(int j = 0; j <= fdmax; j++) {
+			    if (FD_ISSET(j, &write_fds)) {
+				printf("writing length:'%hu' and string:'%s' to j: %d\n", host_length, buff, j);
+				int success;
+				success = write(j, &event, sizeof(int));
 
-			    if (success == -1) {
-				close(j);
-				perror("Error writing to parents pipe.\n");
-				FD_CLR(j, &master_write_fds);
-				exit(1);
+				if (success == -1) {
+				    close(j);
+				    perror("Error writing to parents pipe.\n");
+				    FD_CLR(j, &master_write_fds);
+				    exit(1);
+				}
+
+				success = write(j, &host_length, sizeof(host_length));
+
+				if (success == -1) {
+				    close(j);
+				    perror("Error writing to parents pipe.\n");
+				    FD_CLR(j, &master_write_fds);
+				    exit(1);
+				}
+
+				success = write(j, buff, host_length);
+
+				if (success == -1) {
+				    close(j);
+				    FD_CLR(j, &master_write_fds);
+				    exit(1);
+				}
+				printf("wrote to parents pipe\n");
 			    }
-
-			    success = write(j, &host_length, sizeof(host_length));
-
-			    if (success == -1) {
-				close(j);
-				perror("Error writing to parents pipe.\n");
-				FD_CLR(j, &master_write_fds);
-				exit(1);
-			    }
-
-		    	    success = write(j, buff, host_length);
-
-			    if (success == -1) {
-				close(j);
-				FD_CLR(j, &master_write_fds);
-				exit(1);
-			    }
-			    printf("wrote to parents pipe\n");
-		    	}
+			}
 		    }
+
+		   
 
 		    free(buff);
 
@@ -315,9 +321,27 @@ int main(int argc, char * argv[])
 		// user connect -> add user to linked list, tell users
 		// user message -> send to all users
 		else {
+		    unsigned short int read_length;
+		    int event, success;
+		    char * read_buff;
+
+		    success = read(i, &event, sizeof(unsigned short int)); // read event
+		    printf("event: %d\n", event);
+
+		    if (success == -1) {
+			perror("Error reading from pipe.\n");
+		    }
+
+		    // get corresponding string (username, message, etc.);
+		    read_length = get_string_from_fd(i, &read_buff);
+		    printf("heard string: %s\n", read_buff);
+
+		    if (read_length == -1 || read_length == 0) {
+			perror("Error reading from pipe.\n");
+			exit(1);
+		    }
 
 		    pid_t worker;
-		    pid_t mine;
 		    int worker_pipe[2];
 
 		    // fork a process to read/write the data
@@ -326,8 +350,6 @@ int main(int argc, char * argv[])
 
 		    pipe(worker_pipe);
 		    printf("Worker forked on %d.\n", i);
-		    mine = getpid();
-		    printf("PID: %d\n", mine);
 		    worker = fork();
 		    
 		    if (worker == -1) {
@@ -336,29 +358,9 @@ int main(int argc, char * argv[])
 		    }
 
 		    else if (worker == 0) {
-			unsigned short int read_length;
-			int event, success;
-			char * read_buff;
 
 			close(worker_pipe[0]); // close read side of pipe
-			printf("before blocking event\n");
-			success = read(i, &event, sizeof(unsigned short int)); // read event
-			printf("event: %d\n", event);
 
-			if (success == -1) {
-			    perror("Error reading from pipe.\n");
-			    close(worker_pipe[1]);
-			}
-
-			// get corresponding string (username, message, etc.);
-			read_length = get_string_from_fd(i, &read_buff);
-			printf("heard string: %s\n", read_buff);
-
-			if (read_length == -1 || read_length == 0) {
-			    perror("Error reading from pipe.\n");
-			    exit(1);
-			}
-		    
 			if (event == USR_CONNECT) {
 			    
 			    printf("Username '%s' connected.\n", read_buff);
@@ -368,6 +370,7 @@ int main(int argc, char * argv[])
 				int disconnect = CHILD_SUICIDE;
 				write(i, &disconnect, sizeof(int));
 			    }
+			    
 			    // need to tell parent to create the node;
 			    write(worker_pipe[1], &event, sizeof(int));
 			    write(worker_pipe[1], &read_length, sizeof(unsigned short int));
@@ -409,7 +412,6 @@ int main(int argc, char * argv[])
 		    else {
 			printf("were not??\n");
 			close(worker_pipe[1]); // close write end of pipe;
-			FD_CLR(i, &master_read_fds);
 			FD_SET(worker_pipe[0], &master_worker_pipes);
 			if (worker_pipe[0] > fdmax) {
 			    fdmax = worker_pipe[0];
