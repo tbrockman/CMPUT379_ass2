@@ -154,15 +154,28 @@ int main(int argc, char * argv[])
 		for (int i =0; i <= fdmax; i++) {
 		    if (FD_ISSET(i, &read_fds)) {
 			// info from server;
+			char translation;
 			int type;
 			unsigned short int length;
 			char * text_buffer;
 
 			if (i == sockfd) {
 
-			    if (recv(sockfd, &type, sizeof(int), 0) == -1) {
+			    if (recv(sockfd, &translation, sizeof(char), 0) == -1) {
 				perror("Error reading from socket.\n");
 				exit(1);
+			    }
+
+			    if (translation == 0x00) {
+				type = 0;
+			    }
+			    
+			    else if (translation == 0x01) {
+				type = 1;
+			    }
+
+			    else if (translation == 0x02) {
+				type = 2;
 			    }
 
 			    if ((length = get_string_from_fd(sockfd, &text_buffer)) == -1) {
@@ -171,16 +184,16 @@ int main(int argc, char * argv[])
 			    }
 
 			    if (type == USR_MESSAGE) {
-				//printf("%s\n", text_buffer);
+				printf("User message: %s\n", text_buffer);
 			    }
 
 			    else if (type == USR_CONNECT) {
-				//printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
+				printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
 				create_node(text_buffer, length, 0, &user_linked_list_ptr);
 			    }
 
 			    else if (type == USR_DISCONNECT) {
-				//printf("< User \"%s\" has left the chat.\n", text_buffer);
+				printf("< User \"%s\" has left the chat.\n", text_buffer);
 				remove_node(text_buffer, &user_linked_list_ptr);
 			    }
 			}

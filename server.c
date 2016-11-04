@@ -237,7 +237,6 @@ int main(int argc, char * argv[])
 		    pid_t pid_here;
 		    
 		    pid_here = getpid();
-		    printf("here: pid %d\n", pid_here);
 		    host_length = get_string_from_fd(clientfd, &buff);
 
 		    if (host_length != 0) {
@@ -302,29 +301,38 @@ int main(int argc, char * argv[])
 		// we're in the child and have data from the parent
 		else if (i == child_read) {
 		    int event;
+		    char send_event;
 		    unsigned short int buff_length;
 		    char * child_buffer;
 		    printf("In child reading from parent.\n");
 		    read(i, &event, sizeof(int));
 		    buff_length = get_string_from_fd(i, &child_buffer);
-		    printf("buff length and string: %d, %s\n", buff_length, child_buffer);
 
 		    if (event == CHILD_SUICIDE) {
 			exit(1);
 		    }
 
 		    else if (event == USR_DISCONNECT) {
+			send_event = 0x02;
+			send(clientfd, &send_event, sizeof(char), 0);
+			
 			// send to client fd that user disconnected
 		    }
 
 		    else if (event == USR_CONNECT) {
 			// send to client fd that user connected
+			send_event = 0x01;
+			send(clientfd, &send_event, sizeof(char), 0);
 		    }
 
 		    else if (event == USR_MESSAGE) {
-			
+			send_event = 0x00;
+			send(clientfd, &send_event, sizeof(char), 0);
 			// send to client fd user message
 		    }
+		    send(clientfd, &buff_length, sizeof(unsigned short int), 0);
+		    send(clientfd, child_buffer, sizeof(char) * buff_length, 0);
+		    printf("event sent\n");
 		}
 
 		// otherwise we have read data from a pipe
