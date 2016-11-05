@@ -52,16 +52,16 @@ void write_message_to_all_set(fd_set * master_write_fds, int fdmax, int * event,
 
 int main(int argc, char * argv[])
 {
+    
     if (!argv[1]) {
 	printf("Invalid port specified.\n");
 	exit(0);
     }
 
-    daemon(0, 1); // change 1 to 0 when no longer testing
+    daemon(0, 0);
 
     int sock, fdmax, clientfd, child_read, needs_to_connect;
     int * timeperiod;
-    pid_t current_pid;
     struct sockaddr_in sa;
     struct sockaddr_in remoteaddr;
     struct sigaction sigsegv_action;
@@ -72,6 +72,11 @@ int main(int argc, char * argv[])
     fd_set worker_pipes;
     fd_set read_fds;
     fd_set write_fds;
+    //FILE * fp;
+    char pid_buff[45];
+
+    //sprintf(pid_buff, "%s%ld%s", "server379", (long)getpid(), ".log");
+    //fp = fopen(pid_buff, "w+");
 
     timeperiod = NULL;
 
@@ -87,9 +92,6 @@ int main(int argc, char * argv[])
     FD_ZERO(&write_fds);
     FD_ZERO(&worker_pipes);
 
-    current_pid = getpid();
-    printf("Process ID: %d\n", (int)(current_pid));
-
     GLOBAL_PORT = atoi(argv[1]);
 
     sock = socket (AF_INET, SOCK_STREAM, 0);
@@ -104,7 +106,7 @@ int main(int argc, char * argv[])
 
     
     if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &(int){ 1 }, sizeof(int)) < 0) {
-	perror("setsockopt(SO_REUSEADDR) failed");
+	printf("setsockopt(SO_REUSEADDR) failed");
 	exit(1);
     }
 
@@ -114,7 +116,7 @@ int main(int argc, char * argv[])
      }
 
     if (listen(sock, 5) == -1) {
-	perror("Error listening on master socket\n");
+	printf("Error listening on master socket\n");
 	exit(1);
     }
 
@@ -134,7 +136,7 @@ int main(int argc, char * argv[])
 
 	// note for later: select returns 0 on timeout
 	if (select(fdmax+1, &read_fds, NULL, NULL, &no_block) == -1) {
-	    perror("Error on select\n");
+	    printf("Error on select\n");
 	    exit(1);
 	}
 
@@ -146,7 +148,7 @@ int main(int argc, char * argv[])
 		    addrlen = sizeof remoteaddr;
                     clientfd = accept(sock, (struct sockaddr *)&remoteaddr, &addrlen);
                     if (clientfd == -1) {
-                        perror("Error accepting client connection.");
+                        printf("Error accepting client connection.");
                     }
 
 		    int fd_parent[2];
@@ -156,7 +158,7 @@ int main(int argc, char * argv[])
 		    pid_t pid = fork();
 
 		    if (pid == -1) {
-			perror("Error forking.");
+			printf("Error forking.");
 			exit(1);
 		    }
 
@@ -185,7 +187,7 @@ int main(int argc, char * argv[])
 			    if (x != fd_child[0] && x != fd_parent[1] &&
 				x != clientfd && x != fileno(stdout)) {
 				if (close(x) == -1) {
-				    perror("Error closing child FD\n");
+				    printf("Error closing child FD\n");
 				}
 			    }
 			}
@@ -200,7 +202,7 @@ int main(int argc, char * argv[])
 			n[1] = 0xa7;
 
 			if (send(clientfd, n, sizeof(unsigned char) * 2, 0) == -1) {
-			    perror("Error sending handshake to client.\n");
+			    printf("Error sending handshake to client.\n");
 			    close(clientfd);
 			    exit(1);
 			}
@@ -209,7 +211,7 @@ int main(int argc, char * argv[])
 			
 			if (send(clientfd, &length, sizeof(unsigned short int), 0) == -1) {
 			    
-			    perror("Error sending # of users to client.\n");
+			    printf("Error sending # of users to client.\n");
 			    close(clientfd);
 			    exit(1);
 			}
@@ -222,14 +224,14 @@ int main(int argc, char * argv[])
 			    string_length = strlen(users_ptr[v]);
 			    network_length = htons(string_length);
 			    if (send(clientfd, &network_length, sizeof(unsigned short int), 0) == -1) {
-				    perror("Error sending user to client.\n");
+				    printf("Error sending user to client.\n");
 				    close(clientfd);
 				    exit(1);
 			    }
 			    
 			    printf("Sending username: %s\n to client.\n", users_ptr[v]);
 			    if (send(clientfd, users_ptr[v], sizeof(char) * string_length, 0) == -1) {
-				perror("Error sending user to client.\n");
+				printf("Error sending user to client.\n");
 				close(clientfd);
 				exit(1);
 			    }
@@ -265,14 +267,13 @@ int main(int argc, char * argv[])
 
 		    if (host_length <= 0) {
 			if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
-			    perror("Error on write select\n");
+			    printf("Error on write select\n");
 			    exit(-1);
 			}
 			
 			// write to parents pipe
 			for(int j = 0; j <= fdmax; j++) {
 			    if (FD_ISSET(j, &write_fds)) {
-				printf("telling parent about disconnect\n");
 				int success;
 				event = 2;
 				success = write(j, &event, sizeof(int));
@@ -294,7 +295,7 @@ int main(int argc, char * argv[])
 			}
 
 			if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
-			    perror("Error on write select\n");
+			    printf("Error on write select\n");
 			    exit(-1);
 			}
 
@@ -307,7 +308,7 @@ int main(int argc, char * argv[])
 
 				if (success == -1) {
 				    close(j);
-				    perror("Error writing to parents pipe.\n");
+				    printf("Error writing to parents pipe.\n");
 				    FD_CLR(j, &master_write_fds);
 				    exit(1);
 				}
@@ -318,7 +319,7 @@ int main(int argc, char * argv[])
 
 				if (success == -1) {
 				    close(j);
-				    perror("Error writing to parents pipe.\n");
+				    printf("Error writing to parents pipe.\n");
 				    FD_CLR(j, &master_write_fds);
 				    exit(1);
 				}
@@ -353,7 +354,6 @@ int main(int argc, char * argv[])
 		    char send_event;
 		    unsigned short int buff_length, network_length;
 		    char * child_buffer;
-		    printf("In child reading from parent.\n");
 		    read(i, &event, sizeof(int));
 		    buff_length = get_string_from_fd(i, &child_buffer);
 		    network_length = htons(buff_length);
@@ -420,7 +420,7 @@ int main(int argc, char * argv[])
 			    read_length = get_string_from_fd(i, &read_buff);
 
 			    if (read_length == -1 || read_length == 0) {
-				perror("Error reading from pipe.\n");
+				printf("Error reading from pipe.\n");
 				close(i);
 				FD_CLR(i, &master_read_fds);
 				continue;
@@ -428,7 +428,7 @@ int main(int argc, char * argv[])
 
 			    if (event == USR_CONNECT || event == USR_MESSAGE) {
 				if (read(i, &user_socket_fd, sizeof(int)) <= 0) {
-				    perror("Error reading socket fd from pipe.\n");
+				    printf("Error reading socket fd from pipe.\n");
 				    close(i);
 				    FD_CLR(i, &master_read_fds);
 				    continue;
@@ -449,7 +449,7 @@ int main(int argc, char * argv[])
 		    worker = fork();
 		    
 		    if (worker == -1) {
-			perror("Parent fork error.\n");
+			printf("Parent fork error.\n");
 			exit(1);
 		    }
 
@@ -468,18 +468,18 @@ int main(int argc, char * argv[])
 				int disconnect = CHILD_SUICIDE;
 				write(i, &disconnect, sizeof(int));
 			    }
+			    else {
+				write(worker_pipe[1], &event, sizeof(int));
+				write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
+				write(worker_pipe[1], read_buff, sizeof(char) * read_length);
+				write(worker_pipe[1], &user_socket_fd, sizeof(int));
 			    
-			    write(worker_pipe[1], &event, sizeof(int));
-			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
-			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
-			    write(worker_pipe[1], &user_socket_fd, sizeof(int));
-			    
-			    write_message_to_all_set(&master_write_fds, fdmax, &event, read_buff, read_length);
+				write_message_to_all_set(&master_write_fds, fdmax, &event, read_buff, read_length);
+			    }
 
 			}
 
 			else if (event == USR_DISCONNECT) {
-			    printf("disconnect\n");
 			    // tell parent to remove the node
 			    write(worker_pipe[1], &event, sizeof(int));
 			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
@@ -523,7 +523,7 @@ int main(int argc, char * argv[])
 	non_block.tv_usec = 0;
 
 	if (select(fdmax+1, &worker_pipes, NULL, NULL, &non_block) == -1) {
-	    perror("Error reading from worker pipe.\n");
+	    printf("Error reading from worker pipe.\n");
 	    exit(1);
 	}
        
@@ -545,7 +545,7 @@ int main(int argc, char * argv[])
 		if (event == USR_CONNECT) {
 		    int user_socket_fd;
 		    if (read(y, &user_socket_fd, sizeof(int)) <= 0) {
-			perror("Error reading connecting user socket fd.\n");
+			printf("Error reading connecting user socket fd.\n");
 			close(y);
 			FD_CLR(y, &master_worker_pipes);
 			continue;
