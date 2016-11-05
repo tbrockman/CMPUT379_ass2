@@ -62,12 +62,26 @@ struct node * get_user(char * username_ptr, struct node * head) {
     return 0;
 }
 
+struct node * get_user_from_fd(int fd, struct node * head) {
+    struct node * current;
+    current = head;
+
+    while (current) {
+	if (current->socket_fd == fd) {
+	    return current;
+	}
+	current = current->next;
+    }
+    return 0;
+}
+
 struct node * create_node(char * text, unsigned short int length, int socket_fd, struct node ** head_ptr_ptr) {
     struct node * new_node;
     
     new_node = (struct node *)malloc(sizeof(struct node));
     new_node->username_ptr = text;
     new_node->length = length;
+    new_node->socket_fd = socket_fd;
     new_node->next = NULL;
     if (!(*head_ptr_ptr)) {
 	*head_ptr_ptr = new_node;

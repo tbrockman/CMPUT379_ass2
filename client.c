@@ -44,15 +44,6 @@ int main(int argc, char * argv[])
 	exit(1);
     }
 
-    struct sockaddr_in localaddr;
-    localaddr.sin_family = AF_INET;
-    localaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    localaddr.sin_port = 0;
-    if (bind(sockfd, (struct sockaddr *)&localaddr, sizeof(localaddr))==-1){
-	perror("Error binding.\n");
-	exit(1);
-    }
-
     struct sockaddr_in remoteaddr;
     remoteaddr.sin_family = AF_INET;
     remoteaddr.sin_addr.s_addr = inet_addr(hostname);
@@ -160,7 +151,7 @@ int main(int argc, char * argv[])
 			char * text_buffer;
 
 			if (i == sockfd) {
-
+			    
 			    if (recv(sockfd, &translation, sizeof(char), 0) == -1) {
 				perror("Error reading from socket.\n");
 				exit(1);
@@ -184,16 +175,16 @@ int main(int argc, char * argv[])
 			    }
 
 			    if (type == USR_MESSAGE) {
-				printf("User message: %s\n", text_buffer);
+				printf("%s\n", text_buffer);
 			    }
 
 			    else if (type == USR_CONNECT) {
-				printf("< User \"%s\" has connected to the chat. > \n", text_buffer);
+				printf("< User '%s' has connected to the chat. > \n", text_buffer);
 				create_node(text_buffer, length, 0, &user_linked_list_ptr);
 			    }
 
 			    else if (type == USR_DISCONNECT) {
-				printf("< User \"%s\" has left the chat.\n", text_buffer);
+				printf("< User '%s' has left the chat.\n", text_buffer);
 				remove_node(text_buffer, &user_linked_list_ptr);
 			    }
 			}
@@ -261,7 +252,6 @@ int main(int argc, char * argv[])
 	    }
 	    
 	    else if (select_status == 0) {
-		printf("Sending dummy message.\n");
 		network_order = 0;
 		if (send(sockfd, &network_order, sizeof(unsigned short int), 0) == -1) {
 		    perror("Error sending dummy message.\n");

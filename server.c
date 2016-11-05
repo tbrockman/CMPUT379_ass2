@@ -19,6 +19,37 @@ void sigterm_handler(int signo) {
     exit(0);
 }
 
+void write_message_to_all_set(fd_set * master_write_fds, int fdmax, int * event, char * message, unsigned short int length) {
+    unsigned short int convert_to_network;
+    convert_to_network = htons(length);
+
+    for (int k = 0; k <= fdmax; k++) {
+	// don't care if it's ready or not
+	// we'll block until it is
+
+	// look at the read lengths you're sending
+	if (FD_ISSET(k, master_write_fds)) {
+
+	    if (write(k, event, sizeof(int)) <= 0) {
+		perror("Error writing to child.\n");
+		close(k);
+		FD_CLR(k, master_write_fds);
+		continue;
+	    }
+	    if (write(k, &convert_to_network, sizeof(unsigned short int)) <= 0) {
+		perror("Error writing to child.");
+		close(k);
+		FD_CLR(k, master_write_fds);
+		continue;
+	    }
+	    if (write(k, message, sizeof(char) * length) <= 0) {
+		close(k);
+		FD_CLR(k, master_write_fds);
+	    }
+	}
+    } 
+}
+
 int main(int argc, char * argv[])
 {
     if (!argv[1]) {
@@ -124,7 +155,6 @@ int main(int argc, char * argv[])
 		    int fd_child[2];
 		    pipe(fd_parent);
 		    pipe(fd_child);
-		    printf("Socket worker fork.\n");
 		    pid_t pid = fork();
 
 		    if (pid == -1) {
@@ -249,7 +279,6 @@ int main(int argc, char * argv[])
 			    event = 0;
 			}
 
-			printf("waiting to write to parents pipe\n");
 			if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
 			    perror("Error on write select\n");
 			    exit(-1);
@@ -287,12 +316,18 @@ int main(int argc, char * argv[])
 				    FD_CLR(j, &master_write_fds);
 				    exit(1);
 				}
-				printf("wrote to parents pipe\n");
+
+				if (event == 1 || event == 0) {
+				    success = write(j, &clientfd, sizeof(int));
+				    if (success == -1) {
+					close(j);
+					FD_CLR(j, &master_write_fds);
+					exit(1);
+				    }
+				}
 			    }
 			}
 		    }
-
-		   
 
 		    free(buff);
 
@@ -302,11 +337,12 @@ int main(int argc, char * argv[])
 		else if (i == child_read) {
 		    int event;
 		    char send_event;
-		    unsigned short int buff_length;
+		    unsigned short int buff_length, network_length;
 		    char * child_buffer;
 		    printf("In child reading from parent.\n");
 		    read(i, &event, sizeof(int));
 		    buff_length = get_string_from_fd(i, &child_buffer);
+		    network_length = htons(buff_length);
 
 		    if (event == CHILD_SUICIDE) {
 			exit(1);
@@ -330,9 +366,8 @@ int main(int argc, char * argv[])
 			send(clientfd, &send_event, sizeof(char), 0);
 			// send to client fd user message
 		    }
-		    send(clientfd, &buff_length, sizeof(unsigned short int), 0);
+		    send(clientfd, &network_length, sizeof(unsigned short int), 0);
 		    send(clientfd, child_buffer, sizeof(char) * buff_length, 0);
-		    printf("event sent\n");
 		}
 
 		// otherwise we have read data from a pipe
@@ -342,25 +377,43 @@ int main(int argc, char * argv[])
 		// user message -> send to all users
 		else {
 		    unsigned short int read_length;
-		    int event, success;
+		    int event, success, user_socket_fd;
 		    char * read_buff;
 
 		    success = read(i, &event, sizeof(int)); // read event
-		    printf("event: %d\n", event);
 
-		    if (success == -1) {
-			perror("Error reading from pipe.\n");
-		    }
-
-		    // get corresponding string (username, message, etc.);
-		    read_length = get_string_from_fd(i, &read_buff);
-		    printf("heard string: %s with length%d\n", read_buff, read_length);
-
-		    if (read_length == -1 || read_length == 0) {
-			perror("Error reading from pipe.\n");
+		    if (success == -1 || success == 0) {
 			close(i);
 			FD_CLR(i, &master_read_fds);
-			continue;
+
+			event = 2;
+			struct node * disconnected;
+			disconnected = get_user_from_fd(2, user_linked_list_ptr);
+			read_buff = disconnected->username_ptr;
+			read_length = disconnected->length;
+
+		    }
+
+		    else {
+
+			// get corresponding string (username, message, etc.);
+			read_length = get_string_from_fd(i, &read_buff);
+
+			if (read_length == -1 || read_length == 0) {
+			    perror("Error reading from pipe.\n");
+			    close(i);
+			    FD_CLR(i, &master_read_fds);
+			    continue;
+			}
+
+			if (event == USR_CONNECT || event == USR_MESSAGE) {
+			    if (read(i, &user_socket_fd, sizeof(int)) <= 0) {
+				perror("Error reading socket fd from pipe.\n");
+				close(i);
+				FD_CLR(i, &master_read_fds);
+				continue;
+			    }
+			}
 		    }
 
 		    pid_t worker;
@@ -371,7 +424,6 @@ int main(int argc, char * argv[])
 		    // to modify our linked list
 
 		    pipe(worker_pipe);
-		    printf("Worker forked on %d.\n", i);
 		    worker = fork();
 		    
 		    if (worker == -1) {
@@ -395,12 +447,13 @@ int main(int argc, char * argv[])
 				write(i, &disconnect, sizeof(int));
 			    }
 			    
-			    // need to tell parent to create the node;
-			    printf(" event creating node: %d with length %d\n", event, read_length);
 			    write(worker_pipe[1], &event, sizeof(int));
 			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
 			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
-			    printf("parent 4\n");
+			    write(worker_pipe[1], &user_socket_fd, sizeof(int));
+			    
+			    write_message_to_all_set(&master_write_fds, fdmax, &event, read_buff, read_length);
+
 			}
 
 			else if (event == USR_DISCONNECT) {
@@ -409,42 +462,25 @@ int main(int argc, char * argv[])
 			    write(worker_pipe[1], &event, sizeof(int));
 			    write(worker_pipe[1], &convert_to_network, sizeof(unsigned short int));
 			    write(worker_pipe[1], read_buff, sizeof(char) * read_length);
+
+			    write_message_to_all_set(&master_write_fds, fdmax, &event, read_buff, read_length);
 			}
 
 			else if (event == USR_MESSAGE) {
-			    // tell all children
-			    for (int k = 0; k <= fdmax; k++) {
-				// don't care if it's ready or not
-				// we'll block until it is
+			    struct node * user_from_fd;
+			    char * concatenated;
+			    char * concat_final;
+			    char * colon = ": ";
+			    unsigned short int str_length;
+			    
+			    user_from_fd = get_user_from_fd(user_socket_fd, user_linked_list_ptr);
+			    
+			    concatenated = strcat(user_from_fd->username_ptr, colon);
+			    concat_final = strcat(concatenated, read_buff);
+			    str_length = strlen(concat_final);
 
-				// look at the read lengths you're sending
-				if (FD_ISSET(k, &master_write_fds)) {
-				    if (write(k, &event, sizeof(int)) <= 0) {
-					perror("Error writing to child.\n");
-					close(k);
-					FD_CLR(k, &master_write_fds);
-					continue;
-				    }
-				    if (write(k, &convert_to_network, sizeof(unsigned short int)) <= 0) {
-					perror("Error writing to child.");
-					close(k);
-					FD_CLR(k, &master_write_fds);
-					continue;
-					}
-				    if (write(k, read_buff, sizeof(char) * read_length) <= 0) {
-					close(k);
-					FD_CLR(k, &master_write_fds);
-				     }
-				    
-				}
-			    }
+			    write_message_to_all_set(&master_write_fds, fdmax, &event, concat_final, str_length);
 			}
-
-			else {
-			    printf("Unknown event.\n");
-			}
-			
-			printf("left\n");
 			exit(1); // close after doing work
 		    }
 
@@ -482,10 +518,22 @@ int main(int argc, char * argv[])
 		    continue;
 		}
 		
-		printf("event from worker: %d\n", event);
 	        read_length = get_string_from_fd(y, &read_buff);
 
-		printf("returned read length: %d\n", read_length);
+		if (event == USR_CONNECT) {
+		    int user_socket_fd;
+		    if (read(y, &user_socket_fd, sizeof(int)) <= 0) {
+			perror("Error reading connecting user socket fd.\n");
+			close(y);
+			FD_CLR(y, &master_worker_pipes);
+			continue;
+		    }
+
+		    create_node(read_buff, read_length, user_socket_fd, &user_linked_list_ptr);
+		}
+		else if (event == USR_DISCONNECT) {
+		    remove_node(read_buff, &user_linked_list_ptr);
+		}
 		if (read_length <= 0) {
 		    close(y);
 		    FD_CLR(y, &master_worker_pipes);
