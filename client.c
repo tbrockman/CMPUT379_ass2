@@ -115,6 +115,8 @@ int main(int argc, char * argv[])
 	    exit(1);
 	}
 
+	printf("%s, username lenth: %hu\n", username, ntohs(username_length));
+
 	if (send(sockfd, username, ntohs(username_length) * sizeof(char), 0) == -1) {
 	    perror("Error sending username.\n");
 	    exit(1);
@@ -184,7 +186,7 @@ int main(int argc, char * argv[])
 			    }
 
 			    else if (type == USR_DISCONNECT) {
-				printf("< User '%s' has left the chat.\n", text_buffer);
+				printf("< User '%s' has left the chat. >\n", text_buffer);
 				remove_node(text_buffer, &user_linked_list_ptr);
 			    }
 			}
@@ -252,7 +254,7 @@ int main(int argc, char * argv[])
 	    }
 	    
 	    else if (select_status == 0) {
-		network_order = 0;
+		network_order = htons(0);
 		if (send(sockfd, &network_order, sizeof(unsigned short int), 0) == -1) {
 		    perror("Error sending dummy message.\n");
 		    exit(1);

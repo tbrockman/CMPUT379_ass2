@@ -107,8 +107,6 @@ int main(int argc, char * argv[])
 	perror("setsockopt(SO_REUSEADDR) failed");
 	exit(1);
     }
-	
-
 
     if (bind (sock, (struct sockaddr*) &sa, sizeof (sa))) {
 	perror ("Server: cannot bind master socket\n");
@@ -192,8 +190,6 @@ int main(int argc, char * argv[])
 			    }
 			}
 
-
-
 			// we now need to communicate with the client
 			unsigned char n[2];
 			unsigned short int length;
@@ -264,12 +260,30 @@ int main(int argc, char * argv[])
 		    unsigned short int host_length;
 		    int event;
 		    char * buff;
-		    pid_t pid_here;
-		    
-		    pid_here = getpid();
+
 		    host_length = get_string_from_fd(clientfd, &buff);
 
-		    if (host_length != 0) {
+		    if (host_length <= 0) {
+			if (select(fdmax+1, NULL, &write_fds, NULL, NULL) == -1) {
+			    perror("Error on write select\n");
+			    exit(-1);
+			}
+			
+			// write to parents pipe
+			for(int j = 0; j <= fdmax; j++) {
+			    if (FD_ISSET(j, &write_fds)) {
+				printf("telling parent about disconnect\n");
+				int success;
+				event = 2;
+				success = write(j, &event, sizeof(int));
+				success = write(j, &clientfd, sizeof(int));
+			    }
+			}
+
+			exit(0);
+		    }
+
+		    else {
 			if (needs_to_connect) {
 			    event = 1;
 			    needs_to_connect = 0;
@@ -385,35 +399,43 @@ int main(int argc, char * argv[])
 		    if (success == -1 || success == 0) {
 			close(i);
 			FD_CLR(i, &master_read_fds);
-
-			event = 2;
-			struct node * disconnected;
-			disconnected = get_user_from_fd(2, user_linked_list_ptr);
-			read_buff = disconnected->username_ptr;
-			read_length = disconnected->length;
-
+			continue;
 		    }
 
 		    else {
+			
+			if (event == USR_DISCONNECT) {
+			    int closed_socket;
+			    struct node * disconnected_user;
+			    read(i, &closed_socket, sizeof(int));
+			    disconnected_user = get_user_from_fd(closed_socket, user_linked_list_ptr);
+			    read_length = disconnected_user->length;
+			    read_buff = disconnected_user->username_ptr;
 
-			// get corresponding string (username, message, etc.);
-			read_length = get_string_from_fd(i, &read_buff);
-
-			if (read_length == -1 || read_length == 0) {
-			    perror("Error reading from pipe.\n");
 			    close(i);
 			    FD_CLR(i, &master_read_fds);
-			    continue;
 			}
+			else {
+			    // get corresponding string (username, message, etc.);
+			    read_length = get_string_from_fd(i, &read_buff);
 
-			if (event == USR_CONNECT || event == USR_MESSAGE) {
-			    if (read(i, &user_socket_fd, sizeof(int)) <= 0) {
-				perror("Error reading socket fd from pipe.\n");
+			    if (read_length == -1 || read_length == 0) {
+				perror("Error reading from pipe.\n");
 				close(i);
 				FD_CLR(i, &master_read_fds);
 				continue;
 			    }
+
+			    if (event == USR_CONNECT || event == USR_MESSAGE) {
+				if (read(i, &user_socket_fd, sizeof(int)) <= 0) {
+				    perror("Error reading socket fd from pipe.\n");
+				    close(i);
+				    FD_CLR(i, &master_read_fds);
+				    continue;
+				}
+			    }
 			}
+
 		    }
 
 		    pid_t worker;
@@ -532,6 +554,7 @@ int main(int argc, char * argv[])
 		    create_node(read_buff, read_length, user_socket_fd, &user_linked_list_ptr);
 		}
 		else if (event == USR_DISCONNECT) {
+		    printf("removing the node duder %s\n", read_buff);
 		    remove_node(read_buff, &user_linked_list_ptr);
 		}
 		if (read_length <= 0) {
